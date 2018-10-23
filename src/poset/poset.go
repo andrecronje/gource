@@ -230,8 +230,8 @@ func (p *Poset) round2(x string) (int, error) {
 	*/
 	if ex.SelfParent() == root.SelfParent.Hash {
 		// Root is authoritative EXCEPT if other-parent is not in the root
-		if other, ok := root.Others[ex.Hex()]; (ex.OtherParent() == "") ||
-			(ok && other.Hash == ex.OtherParent()) {
+		if other, ok := root.Others[ex.Hex()]; (ex.OtherParent(0) == "") ||
+			(ok && other.Hash == ex.OtherParent(0)) {
 
 			return root.NextRound, nil
 		}
@@ -245,13 +245,13 @@ func (p *Poset) round2(x string) (int, error) {
 	if err != nil {
 		return math.MinInt32, err
 	}
-	if ex.OtherParent() != "" {
+	if ex.OtherParent(0) != "" {
 		var opRound int
 		// XXX
-		if other, ok := root.Others[ex.Hex()]; ok && other.Hash == ex.OtherParent() {
+		if other, ok := root.Others[ex.Hex()]; ok && other.Hash == ex.OtherParent(0) {
 			opRound = root.NextRound
 		} else {
-			opRound, err = p.round(ex.OtherParent())
+			opRound, err = p.round(ex.OtherParent(0))
 			if err != nil {
 				return math.MinInt32, err
 			}
@@ -357,16 +357,16 @@ func (p *Poset) lamportTimestamp2(x string) (int, error) {
 		plt = t
 	}
 
-	if ex.OtherParent() != "" {
+	if ex.OtherParent(0) != "" {
 		opLT := math.MinInt32
-		if _, err := p.Store.GetEvent(ex.OtherParent()); err == nil {
+		if _, err := p.Store.GetEvent(ex.OtherParent(0)); err == nil {
 			// if we know the other-parent, fetch its Round directly
-			t, err := p.lamportTimestamp(ex.OtherParent())
+			t, err := p.lamportTimestamp(ex.OtherParent(0))
 			if err != nil {
 				return math.MinInt32, err
 			}
 			opLT = t
-		} else if other, ok := root.Others[x]; ok && other.Hash == ex.OtherParent() {
+		} else if other, ok := root.Others[x]; ok && other.Hash == ex.OtherParent(0) {
 			// we do not know the other-parent but it is referenced  in Root.Others
 			// we use the Root's LamportTimestamp
 			opLT = other.LamportTimestamp
@@ -417,7 +417,7 @@ func (p *Poset) checkSelfParent(event Event) error {
 
 // Check if we know the OtherParent
 func (p *Poset) checkOtherParent(event Event) error {
-	otherParent := event.OtherParent()
+	otherParent := event.OtherParent(0)
 	if otherParent != "" {
 		// Check if we have it
 		_, err := p.Store.GetEvent(otherParent)
@@ -428,7 +428,7 @@ func (p *Poset) checkOtherParent(event Event) error {
 				return err
 			}
 			other, ok := root.Others[event.Hex()]
-			if ok && other.Hash == event.OtherParent() {
+			if ok && other.Hash == event.OtherParent(0) {
 				return nil
 			}
 			return fmt.Errorf("Other-parent not known")
@@ -454,7 +454,7 @@ func (p *Poset) initEventCoordinates(event *Event) error {
 	event.lastAncestors = make(OrderedEventCoordinates, members)
 
 	selfParent, selfParentError := p.Store.GetEvent(event.SelfParent())
-	otherParent, otherParentError := p.Store.GetEvent(event.OtherParent())
+	otherParent, otherParentError := p.Store.GetEvent(event.OtherParent(0))
 
 	if selfParentError != nil && otherParentError != nil {
 		for i, entry := range event.firstDescendants {
@@ -569,7 +569,7 @@ func (p *Poset) createSelfParentRootEvent(ev Event) (RootEvent, error) {
 
 func (p *Poset) createOtherParentRootEvent(ev Event) (RootEvent, error) {
 
-	op := ev.OtherParent()
+	op := ev.OtherParent(0)
 
 	// it might still be in the Root
 	root, err := p.Store.GetRoot(ev.Creator())
@@ -622,7 +622,7 @@ func (p *Poset) createRoot(ev Event) (Root, error) {
 		OtherParent
 	*/
 	var otherParentRootEvent *RootEvent
-	if ev.OtherParent() != "" {
+	if ev.OtherParent(0) != "" {
 		opre, err := p.createOtherParentRootEvent(ev)
 		if err != nil {
 			return Root{}, err
@@ -663,17 +663,17 @@ func (p *Poset) setWireInfo(event *Event) error {
 		selfParentIndex = selfParent.Index()
 	}
 
-	if event.OtherParent() != "" {
+	if event.OtherParent(0) != "" {
 		// Check Root then regular Events
 		root, err := p.Store.GetRoot(event.Creator())
 		if err != nil {
 			return err
 		}
-		if other, ok := root.Others[event.Hex()]; ok && other.Hash == event.OtherParent() {
+		if other, ok := root.Others[event.Hex()]; ok && other.Hash == event.OtherParent(0) {
 			otherParentCreatorID = other.CreatorID
 			otherParentIndex = other.Index
 		} else {
-			otherParent, err := p.Store.GetEvent(event.OtherParent())
+			otherParent, err := p.Store.GetEvent(event.OtherParent(0))
 			if err != nil {
 				return err
 			}
@@ -1200,7 +1200,7 @@ func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 	treated := map[string]bool{}
 	for _, ev := range events {
 		treated[ev.Hex()] = true
-		otherParent := ev.OtherParent()
+		otherParent := ev.OtherParent(0)
 		if otherParent != "" {
 			opt, ok := treated[otherParent]
 			if !opt || !ok {

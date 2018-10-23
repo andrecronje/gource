@@ -154,8 +154,16 @@ func (e *Event) SelfParent() string {
 	return e.Body.Parents[0]
 }
 
-func (e *Event) OtherParent() string {
-	return e.Body.Parents[1]
+func (e *Event) OtherParent(n int) string {
+	otherParent := e.Body.Parents[1:]
+	if n >= 0 && n < len(otherParent) {
+		return otherParent[n]
+	}
+	return ""
+}
+
+func (e *Event) OtherParents() []string {
+	return e.Body.Parents[1:]
 }
 
 func (e *Event) Transactions() [][]byte {
