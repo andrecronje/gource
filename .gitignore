@@ -2,6 +2,9 @@
 .vscode
 .idea/
 
+# Go prof output
+*.prof
+
 # Go test output
 */*.test
 */*.out
@@ -11,6 +14,7 @@ build
 
 # Dependencies
 vendor
+glide.lock
 
 # gomobile compilation output
 *.aar
@@ -24,4 +28,10 @@ scripts/docker/upx
 nodes
 peers.json
 certs
-lachesis_linux
+lachesis_*
+
+# Backup copies
+*~
+*.bak
+
+.#*

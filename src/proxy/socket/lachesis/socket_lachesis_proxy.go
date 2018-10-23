@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/andrecronje/lachesis/src/log"
+	"github.com/andrecronje/lachesis/src/proxy"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -12,12 +14,15 @@ type SocketLachesisProxy struct {
 	nodeAddress string
 	bindAddress string
 
-	client *SocketLachesisProxyClient
+	handler proxy.ProxyHandler
+
+	client *SocketLachesisProxyClientWebsocket
 	server *SocketLachesisProxyServer
 }
 
 func NewSocketLachesisProxy(nodeAddr string,
 	bindAddr string,
+	handler proxy.ProxyHandler,
 	timeout time.Duration,
 	logger *logrus.Logger) (*SocketLachesisProxy, error) {
 
@@ -27,7 +32,7 @@ func NewSocketLachesisProxy(nodeAddr string,
 		lachesis_log.NewLocal(logger, logger.Level.String())
 	}
 
-	client := NewSocketLachesisProxyClient(nodeAddr, timeout)
+	client := NewSocketLachesisProxyClientWebsocket(nodeAddr, timeout)
 
 	server, err := NewSocketLachesisProxyServer(bindAddr, timeout, logger)
 
@@ -38,6 +43,7 @@ func NewSocketLachesisProxy(nodeAddr string,
 	proxy := &SocketLachesisProxy{
 		nodeAddress: nodeAddr,
 		bindAddress: bindAddr,
+		handler:     handler,
 		client:      client,
 		server:      server,
 	}
@@ -47,30 +53,10 @@ func NewSocketLachesisProxy(nodeAddr string,
 	return proxy, nil
 }
 
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//Implement LachesisProxy interface
-
-func (p *SocketLachesisProxy) CommitCh() chan Commit {
-	return p.server.commitCh
-}
-
-func (p *SocketLachesisProxy) SnapshotRequestCh() chan SnapshotRequest {
-	return p.server.snapshotRequestCh
-}
-
-func (p *SocketLachesisProxy) RestoreCh() chan RestoreRequest {
-	return p.server.restoreCh
-}
-
 func (p *SocketLachesisProxy) SubmitTx(tx []byte) error {
-	ack, err := p.client.SubmitTx(tx)
-
+	err := p.client.SubmitTx(tx)
 	if err != nil {
-		return err
-	}
-
-	if !*ack {
-		return fmt.Errorf("Failed to deliver transaction to Lachesis")
+		return fmt.Errorf("Failed to deliver transaction to Lachesis: %v", err)
 	}
 
 	return nil

@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT="${PROJECT:-lachesis}"
-n="$1"
-node_num=0
+set -euo pipefail
 
-PEERS_DIR="${PEERS_DIR:-$BUILD_DIR}"
-PEERS_DIR="${PEERS_DIR:-$DIR}"
+IFS=$'\n\t'
+
+declare -r DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+. "${DIR%/*}/set_globals.bash"
+
+declare -r n="$1"
+declare -i node_num=0
 
 # [ -f "$PEERS_DIR/peers.json" ] || echo 'peers.json not found' && exit 2
 
-digits="${#n}"
+declare -r digits="${#n}"
 
 for ip in $(jq -rc '.[].NetAddr' "$PEERS_DIR/peers.json"); do
   ip="${ip%:*}";

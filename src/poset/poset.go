@@ -27,7 +27,7 @@ type Poset struct {
 	AnchorBlock             *int             // index of last block with enough signatures
 	LastCommitedRoundEvents int              // number of events in round before LastConsensusRound
 	SigPool                 []BlockSignature // Pool of Block signatures that need to be processed
-	ConsensusTransactions   int              // number of consensus transactions
+	ConsensusTransactions   uint64           // number of consensus transactions
 	PendingLoadedEvents     int              // number of loaded events that are not yet committed
 	commitCh                chan Block       // channel for committing Blocks
 	topologicalIndex        int              // counter used to order events in topological order (only local)
@@ -402,6 +402,15 @@ func (p *Poset) checkSelfParent(event Event) error {
 	creator := event.Creator()
 
 	creatorLastKnown, _, err := p.Store.LastEventFrom(creator)
+
+	p.logger.WithFields(logrus.Fields{
+		"selfParent":       selfParent,
+		"creator":          creator,
+		"creatorLastKnown": creatorLastKnown,
+		"event":            event.Hex(),
+	}).Debugf("checkSelfParent")
+
+
 	if err != nil {
 		return err
 	}
@@ -1091,7 +1100,7 @@ func (p *Poset) ProcessDecidedRounds() error {
 				if err != nil {
 					return err
 				}
-				p.ConsensusTransactions += len(e.Transactions())
+				p.ConsensusTransactions += uint64(len(e.Transactions()))
 				if e.IsLoaded() {
 					p.PendingLoadedEvents--
 				}

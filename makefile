@@ -14,14 +14,14 @@ install:
 build:
 	CGO_ENABLED=0 go build \
 		--ldflags "-X github.com/andrecronje/lachesis/src/version.GitCommit=`git rev-parse HEAD`" \
-		-o build/lachesis ./cmd/lachesis/
+		-o build/lachesis ./cmd/lachesis/main.go
 
 # dist builds binaries for all platforms and packages them for distribution
 dist:
 	@BUILD_TAGS='$(BUILD_TAGS)' sh -c "'$(CURDIR)/scripts/dist.sh'"
 
 test:
-	glide novendor | xargs go test
+	glide novendor | grep -v -e "^\.$$" | xargs go test
 
 # clean up and generate protobuf files
 proto:

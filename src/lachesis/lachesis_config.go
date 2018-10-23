@@ -10,7 +10,6 @@ import (
 	"github.com/andrecronje/lachesis/src/log"
 	"github.com/andrecronje/lachesis/src/node"
 	"github.com/andrecronje/lachesis/src/proxy"
-	aproxy "github.com/andrecronje/lachesis/src/proxy/app"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,8 +28,8 @@ type LachesisConfig struct {
 	Key       *ecdsa.PrivateKey
 	Logger    *logrus.Logger
 
-	Test  bool
-	TestN uint64
+	Test  bool   `mapstructure:"test"`
+	TestN uint64 `mapstructure:"test_n"`
 }
 
 func NewDefaultConfig() *LachesisConfig {
@@ -52,13 +51,12 @@ func NewDefaultConfig() *LachesisConfig {
 
 	config.Logger.Level = LogLevel(config.LogLevel)
 	lachesis_log.NewLocal(config.Logger, config.LogLevel)
-	config.Proxy = aproxy.NewInmemAppProxy(config.Logger)
+	//config.Proxy = sproxy.NewInmemAppProxy(config.Logger)
+	//config.Proxy, _ = sproxy.NewSocketAppProxy("127.0.0.1:1338", "127.0.0.1:1339", 1*time.Second, config.Logger)
 	config.NodeConfig.Logger = config.Logger
 
 	return config
 }
-
-var Config = NewDefaultConfig()
 
 func DefaultBadgerDir() string {
 	dataDir := DefaultDataDir()
@@ -68,6 +66,10 @@ func DefaultBadgerDir() string {
 	return ""
 }
 
+func (c *LachesisConfig) BadgerDir() string {
+	return filepath.Join(c.DataDir, "badger_db")
+}
+
 func DefaultDataDir() string {
 	// Try to place the data folder in the user's home dir
 	home := HomeDir()
@@ -75,7 +77,7 @@ func DefaultDataDir() string {
 		if runtime.GOOS == "darwin" {
 			return filepath.Join(home, ".lachesis")
 		} else if runtime.GOOS == "windows" {
-			return filepath.Join(home, "AppData", "Roaming", "BABBLE")
+			return filepath.Join(home, "AppData", "Roaming", "LACHESIS")
 		} else {
 			return filepath.Join(home, ".lachesis")
 		}

@@ -1,21 +1,18 @@
-FROM glider as stage0
-
-# Glider can be found in https://github.com/Fantom-foundation/fantom-docker/tree/master/glider
-
+FROM offscale/golang-builder-alpine3.8 as stage0
 
 # ADD https://github.com/upx/upx/releases/download/v3.95/upx-3.95-amd64_linux.tar.xz /tmp
 # RUN /bin/tar --version && \
-#     md5sum /tmp/upx-3.95-amd64_linux.tar.xz && \
+#     sha512sum /tmp/upx-3.95-amd64_linux.tar.xz && \
 #     /bin/tar xf /tmp/upx-3.95-amd64_linux.tar.xz && \
 #     /bin/tar -C /bin --strip-components=1 -xzf /tmp/upx-3.95-amd64_linux.tar.xz
 
 ARG compress=false
 
-COPY scripts/docker/upx /cp_bin/
+# COPY scripts/docker/upx /cp_bin/
 
 RUN apk --no-cache add libc-dev cmake && \
     git clone https://github.com/SamuelMarks/docker-static-bin /build/docker-static-bin && \
-    mkdir /build/docker-static-bin/cmake-build-release && \
+    mkdir /build/docker-static-bin/cmake-build-release /cp_bin && \
     cd    /build/docker-static-bin/cmake-build-release && \
     TEST_ENABLED=0 cmake -DCMAKE_BUILD_TYPE=Release .. && \
     cd /build/docker-static-bin/cmd && \

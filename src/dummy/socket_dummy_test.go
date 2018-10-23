@@ -1,22 +1,21 @@
-package proxy
+package dummy
 
 import (
 	"fmt"
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/andrecronje/lachesis/src/common"
+ 	"github.com/andrecronje/lachesis/src/common"
 	bcrypto "github.com/andrecronje/lachesis/src/crypto"
 	"github.com/andrecronje/lachesis/src/poset"
-	aproxy "github.com/andrecronje/lachesis/src/proxy/app"
+	aproxy "github.com/andrecronje/lachesis/src/proxy/socket/app"
 )
 
 func TestSocketProxyServer(t *testing.T) {
 	clientAddr := "127.0.0.1:9990"
 	proxyAddr := "127.0.0.1:9991"
 
-	proxy, err := aproxy.NewSocketAppProxy(clientAddr, proxyAddr, 1*time.Second, common.NewTestLogger(t))
+ 	proxy, err := aproxy.NewSocketAppProxy(clientAddr, proxyAddr, 1*time.Second, common.NewTestLogger(t))
 
 	if err != nil {
 		t.Fatalf("Cannot create SocketAppProxy: %s", err)
@@ -34,7 +33,7 @@ func TestSocketProxyServer(t *testing.T) {
 			if !reflect.DeepEqual(st, tx) {
 				t.Fatalf("tx mismatch: %#v %#v", tx, st)
 			}
-		case <-time.After(200 * time.Millisecond):
+ 		case <-time.After(200 * time.Millisecond):
 			t.Fatalf("timeout")
 		}
 	}()
@@ -42,8 +41,7 @@ func TestSocketProxyServer(t *testing.T) {
 	// now client part connecting to RPC service
 	// and calling methods
 	dummyClient, err := NewDummySocketClient(clientAddr, proxyAddr, common.NewTestLogger(t))
-
-	if err != nil {
+ 	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,5 +122,4 @@ func TestSocketProxyClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error restoring snapshot: %v", err)
 	}
-
 }

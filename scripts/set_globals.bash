@@ -1,7 +1,8 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash -euo pipefail
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+export IFS=$'\n\t'
 
 export PROJECT="${PROJECT:-lachesis}"
 export BUILD_DIR="${BUILD_DIR:-$DIR}"
 export PEERS_DIR="${PEERS_DIR:-$BUILD_DIR}"
+export TARGET_OS="${TARGET_OS:-linux}"
