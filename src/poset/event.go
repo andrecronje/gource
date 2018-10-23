@@ -14,24 +14,24 @@ EventBody
 *******************************************************************************/
 
 type EventBody struct {
-	Transactions    [][]byte         //the payload
-	Parents         []string         //hashes of the event's parents, self-parent first
-	Creator         []byte           //creator's public key
-	Index           int              //index in the sequence of events created by Creator
-	BlockSignatures []BlockSignature //list of Block signatures signed by the Event's Creator ONLY
+	Transactions    [][]byte         // the payload
+	Parents         []string         // hashes of the event's parents, self-parent first
+	Creator         []byte           // creator's public key
+	Index           int              // index in the sequence of events created by Creator
+	BlockSignatures []BlockSignature // list of Block signatures signed by the Event's Creator ONLY
 
-	//wire
-	//It is cheaper to send ints then hashes over the wire
+	// wire
+	// It is cheaper to send ints then hashes over the wire
 	selfParentIndex      int
 	otherParentCreatorID int
 	otherParentIndex     int
 	creatorID            int
 }
 
-//json encoding of body only
+// json encoding of body only
 func (e *EventBody) Marshal() ([]byte, error) {
 	var b bytes.Buffer
-	enc := json.NewEncoder(&b) //will write to b
+	enc := json.NewEncoder(&b) // will write to b
 	if err := enc.Encode(e); err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (e *EventBody) Marshal() ([]byte, error) {
 
 func (e *EventBody) Unmarshal(data []byte) error {
 	b := bytes.NewBuffer(data)
-	dec := json.NewDecoder(b) //will read from b
+	dec := json.NewDecoder(b) // will read from b
 	if err := dec.Decode(e); err != nil {
 		return err
 	}
@@ -102,18 +102,18 @@ type Index struct {
 
 type Event struct {
 	Body      EventBody
-	Signature string //creator's digital signature of body
+	Signature string // creator's digital signature of body
 
 	topologicalIndex int
 
-	//used for sorting
+	// used for sorting
 	round            *int
 	lamportTimestamp *int
 
 	roundReceived *int
 
-	lastAncestors    OrderedEventCoordinates //[participant fake id] => last ancestor
-	firstDescendants OrderedEventCoordinates //[participant fake id] => first descendant
+	lastAncestors    OrderedEventCoordinates // [participant fake id] => last ancestor
+	firstDescendants OrderedEventCoordinates // [participant fake id] => first descendant
 
 	creator string
 	hash    []byte
@@ -170,7 +170,7 @@ func (e *Event) BlockSignatures() []BlockSignature {
 	return e.Body.BlockSignatures
 }
 
-//True if Event contains a payload or is the initial Event of its creator
+// True if Event contains a payload or is the initial Event of its creator
 func (e *Event) IsLoaded() bool {
 	if e.Body.Index == 0 {
 		return true
@@ -182,7 +182,7 @@ func (e *Event) IsLoaded() bool {
 	return hasTransactions
 }
 
-//ecdsa sig
+// ecdsa sig
 func (e *Event) Sign(privKey *ecdsa.PrivateKey) error {
 	signBytes, err := e.Body.Hash()
 	if err != nil {
@@ -213,7 +213,7 @@ func (e *Event) Verify() (bool, error) {
 	return crypto.Verify(pubKey, signBytes, r, s), nil
 }
 
-//json encoding of body and signature
+// json encoding of body and signature
 func (e *Event) Marshal() ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -225,11 +225,11 @@ func (e *Event) Marshal() ([]byte, error) {
 
 func (e *Event) Unmarshal(data []byte) error {
 	b := bytes.NewBuffer(data)
-	dec := json.NewDecoder(b) //will read from b
+	dec := json.NewDecoder(b) // will read from b
 	return dec.Decode(e)
 }
 
-//sha256 hash of body
+// sha256 hash of body
 func (e *Event) Hash() ([]byte, error) {
 	if len(e.hash) == 0 {
 		hash, err := e.Body.Hash()

@@ -15,22 +15,22 @@ import (
 	"github.com/andrecronje/lachesis/src/peers"
 )
 
-//Poset is a DAG of Events. It also contains methods to extract a consensus
-//order of Events and map them onto a blockchain.
+// Poset is a DAG of Events. It also contains methods to extract a consensus
+// order of Events and map them onto a blockchain.
 type Poset struct {
-	Participants            *peers.Peers     //[public key] => id
-	Store                   Store            //store of Events, Rounds, and Blocks
-	UndeterminedEvents      []string         //[index] => hash . FIFO queue of Events whose consensus order is not yet determined
-	PendingRounds           []*pendingRound  //FIFO queue of Rounds which have not attained consensus yet
-	LastConsensusRound      *int             //index of last consensus round
-	FirstConsensusRound     *int             //index of first consensus round (only used in tests)
-	AnchorBlock             *int             //index of last block with enough signatures
-	LastCommitedRoundEvents int              //number of events in round before LastConsensusRound
-	SigPool                 []BlockSignature //Pool of Block signatures that need to be processed
-	ConsensusTransactions   int              //number of consensus transactions
-	PendingLoadedEvents     int              //number of loaded events that are not yet committed
-	commitCh                chan Block       //channel for committing Blocks
-	topologicalIndex        int              //counter used to order events in topological order (only local)
+	Participants            *peers.Peers     // [public key] => id
+	Store                   Store            // store of Events, Rounds, and Blocks
+	UndeterminedEvents      []string         // [index] => hash . FIFO queue of Events whose consensus order is not yet determined
+	PendingRounds           []*pendingRound  // FIFO queue of Rounds which have not attained consensus yet
+	LastConsensusRound      *int             // index of last consensus round
+	FirstConsensusRound     *int             // index of first consensus round (only used in tests)
+	AnchorBlock             *int             // index of last block with enough signatures
+	LastCommitedRoundEvents int              // number of events in round before LastConsensusRound
+	SigPool                 []BlockSignature // Pool of Block signatures that need to be processed
+	ConsensusTransactions   int              // number of consensus transactions
+	PendingLoadedEvents     int              // number of loaded events that are not yet committed
+	commitCh                chan Block       // channel for committing Blocks
+	topologicalIndex        int              // counter used to order events in topological order (only local)
 	superMajority           int
 	trustCount              int
 
@@ -43,8 +43,8 @@ type Poset struct {
 	logger *logrus.Entry
 }
 
-//NewPoset instantiates a Poset from a list of participants, underlying
-//data store and commit channel
+// NewPoset instantiates a Poset from a list of participants, underlying
+// data store and commit channel
 func NewPoset(participants *peers.Peers, store Store, commitCh chan Block, logger *logrus.Entry) *Poset {
 	if logger == nil {
 		log := logrus.New()
@@ -78,7 +78,7 @@ func NewPoset(participants *peers.Peers, store Store, commitCh chan Block, logge
 Private Methods
 *******************************************************************************/
 
-//true if y is an ancestor of x
+// true if y is an ancestor of x
 func (p *Poset) ancestor(x, y string) (bool, error) {
 	if c, ok := p.ancestorCache.Get(Key{x, y}); ok {
 		return c.(bool), nil
@@ -118,7 +118,7 @@ func (p *Poset) ancestor2(x, y string) (bool, error) {
 	return lastAncestorKnownFromYCreator >= ey.Index(), nil
 }
 
-//true if y is a self-ancestor of x
+// true if y is a self-ancestor of x
 func (p *Poset) selfAncestor(x, y string) (bool, error) {
 	if c, ok := p.selfAncestorCache.Get(Key{x, y}); ok {
 		return c.(bool), nil
@@ -150,15 +150,15 @@ func (p *Poset) selfAncestor2(x, y string) (bool, error) {
 	return exCreator == eyCreator && ex.Index() >= ey.Index(), nil
 }
 
-//true if x sees y
+// true if x sees y
 func (p *Poset) see(x, y string) (bool, error) {
 	return p.ancestor(x, y)
-	//it is not necessary to detect forks because we assume that the InsertEvent
-	//function makes it impossible to insert two Events at the same height for
-	//the same participant.
+	// it is not necessary to detect forks because we assume that the InsertEvent
+	// function makes it impossible to insert two Events at the same height for
+	// the same participant.
 }
 
-//true if x strongly sees y
+// true if x strongly sees y
 func (p *Poset) stronglySee(x, y string) (bool, error) {
 	if c, ok := p.stronglySeeCache.Get(Key{x, y}); ok {
 		return c.(bool), nil
@@ -229,7 +229,7 @@ func (p *Poset) round2(x string) (int, error) {
 		The Event is directly attached to the Root.
 	*/
 	if ex.SelfParent() == root.SelfParent.Hash {
-		//Root is authoritative EXCEPT if other-parent is not in the root
+		// Root is authoritative EXCEPT if other-parent is not in the root
 		if other, ok := root.Others[ex.Hex()]; (ex.OtherParent() == "") ||
 			(ok && other.Hash == ex.OtherParent()) {
 
@@ -247,7 +247,7 @@ func (p *Poset) round2(x string) (int, error) {
 	}
 	if ex.OtherParent() != "" {
 		var opRound int
-		//XXX
+		// XXX
 		if other, ok := root.Others[ex.Hex()]; ok && other.Hash == ex.OtherParent() {
 			opRound = root.NextRound
 		} else {
@@ -279,7 +279,7 @@ func (p *Poset) round2(x string) (int, error) {
 	return parentRound, nil
 }
 
-//true if x is a witness (first event of a round for the owner)
+// true if x is a witness (first event of a round for the owner)
 func (p *Poset) witness(x string) (bool, error) {
 	ex, err := p.Store.GetEvent(x)
 	if err != nil {
@@ -339,14 +339,14 @@ func (p *Poset) lamportTimestamp2(x string) (int, error) {
 		return math.MinInt32, err
 	}
 
-	//We are going to need the Root later
+	// We are going to need the Root later
 	root, err := p.Store.GetRoot(ex.Creator())
 	if err != nil {
 		return math.MinInt32, err
 	}
 
 	plt := math.MinInt32
-	//If it is the creator's first Event, use the corresponding Root
+	// If it is the creator's first Event, use the corresponding Root
 	if ex.SelfParent() == root.SelfParent.Hash {
 		plt = root.SelfParent.LamportTimestamp
 	} else {
@@ -360,15 +360,15 @@ func (p *Poset) lamportTimestamp2(x string) (int, error) {
 	if ex.OtherParent() != "" {
 		opLT := math.MinInt32
 		if _, err := p.Store.GetEvent(ex.OtherParent()); err == nil {
-			//if we know the other-parent, fetch its Round directly
+			// if we know the other-parent, fetch its Round directly
 			t, err := p.lamportTimestamp(ex.OtherParent())
 			if err != nil {
 				return math.MinInt32, err
 			}
 			opLT = t
 		} else if other, ok := root.Others[x]; ok && other.Hash == ex.OtherParent() {
-			//we do not know the other-parent but it is referenced  in Root.Others
-			//we use the Root's LamportTimestamp
+			// we do not know the other-parent but it is referenced  in Root.Others
+			// we use the Root's LamportTimestamp
 			opLT = other.LamportTimestamp
 		}
 
@@ -380,7 +380,7 @@ func (p *Poset) lamportTimestamp2(x string) (int, error) {
 	return plt + 1, nil
 }
 
-//round(x) - round(y)
+// round(x) - round(y)
 func (p *Poset) roundDiff(x, y string) (int, error) {
 
 	xRound, err := p.round(x)
@@ -396,7 +396,7 @@ func (p *Poset) roundDiff(x, y string) (int, error) {
 	return xRound - yRound, nil
 }
 
-//Check the SelfParent is the Creator's last known Event
+// Check the SelfParent is the Creator's last known Event
 func (p *Poset) checkSelfParent(event Event) error {
 	selfParent := event.SelfParent()
 	creator := event.Creator()
@@ -415,14 +415,14 @@ func (p *Poset) checkSelfParent(event Event) error {
 	return nil
 }
 
-//Check if we know the OtherParent
+// Check if we know the OtherParent
 func (p *Poset) checkOtherParent(event Event) error {
 	otherParent := event.OtherParent()
 	if otherParent != "" {
-		//Check if we have it
+		// Check if we have it
 		_, err := p.Store.GetEvent(otherParent)
 		if err != nil {
-			//it might still be in the Root
+			// it might still be in the Root
 			root, err := p.Store.GetRoot(event.Creator())
 			if err != nil {
 				return err
@@ -437,7 +437,7 @@ func (p *Poset) checkOtherParent(event Event) error {
 	return nil
 }
 
-//initialize arrays of last ancestors and first descendants
+// initialize arrays of last ancestors and first descendants
 func (p *Poset) initEventCoordinates(event *Event) error {
 	members := p.Participants.Len()
 
@@ -508,7 +508,7 @@ func (p *Poset) initEventCoordinates(event *Event) error {
 	return nil
 }
 
-//update first decendant of each last ancestor to point to event
+// update first decendant of each last ancestor to point to event
 func (p *Poset) updateAncestorFirstDescendant(event Event) error {
 	creatorPeer, ok := p.Participants.ByPubKey[event.Creator()]
 	if !ok {
@@ -561,8 +561,8 @@ func (p *Poset) createSelfParentRootEvent(ev Event) (RootEvent, error) {
 		Index:            ev.Index() - 1,
 		LamportTimestamp: spLT,
 		Round:            spRound,
-		//FlagTable:ev.FlagTable,
-		//flags:ev.flags,
+		// FlagTable:ev.FlagTable,
+		// flags:ev.flags,
 	}
 	return selfParentRootEvent, nil
 }
@@ -571,7 +571,7 @@ func (p *Poset) createOtherParentRootEvent(ev Event) (RootEvent, error) {
 
 	op := ev.OtherParent()
 
-	//it might still be in the Root
+	// it might still be in the Root
 	root, err := p.Store.GetRoot(ev.Creator())
 	if err != nil {
 		return RootEvent{}, err
@@ -648,7 +648,7 @@ func (p *Poset) setWireInfo(event *Event) error {
 	otherParentCreatorID := -1
 	otherParentIndex := -1
 
-	//could be the first Event inserted for this creator. In this case, use Root
+	// could be the first Event inserted for this creator. In this case, use Root
 	if lf, isRoot, _ := p.Store.LastEventFrom(event.Creator()); isRoot && lf == event.SelfParent() {
 		root, err := p.Store.GetRoot(event.Creator())
 		if err != nil {
@@ -664,7 +664,7 @@ func (p *Poset) setWireInfo(event *Event) error {
 	}
 
 	if event.OtherParent() != "" {
-		//Check Root then regular Events
+		// Check Root then regular Events
 		root, err := p.Store.GetRoot(event.Creator())
 		if err != nil {
 			return err
@@ -698,7 +698,7 @@ func (p *Poset) updatePendingRounds(decidedRounds map[int]int) {
 	}
 }
 
-//Remove processed Signatures from SigPool
+// Remove processed Signatures from SigPool
 func (p *Poset) removeProcessedSignatures(processedSignatures map[int]bool) {
 	var newSigPool []BlockSignature
 	for _, bs := range p.SigPool {
@@ -713,10 +713,10 @@ func (p *Poset) removeProcessedSignatures(processedSignatures map[int]bool) {
 Public Methods
 *******************************************************************************/
 
-//InsertEvent attempts to insert an Event in the DAG. It verifies the signature,
-//checks the ancestors are known, and prevents the introduction of forks.
+// InsertEvent attempts to insert an Event in the DAG. It verifies the signature,
+// checks the ancestors are known, and prevents the introduction of forks.
 func (p *Poset) InsertEvent(event Event, setWireInfo bool) error {
-	//verify signature
+	// verify signature
 	if ok, err := event.Verify(); !ok {
 		if err != nil {
 			return err
@@ -852,11 +852,11 @@ func (p *Poset) DivideRounds() error {
 	return nil
 }
 
-//DecideFame decides if witnesses are famous
+// DecideFame decides if witnesses are famous
 func (p *Poset) DecideFame() error {
 
-	//Initialize the vote map
-	votes := make(map[string]map[string]bool) //[x][y]=>vote(x,y)
+	// Initialize the vote map
+	votes := make(map[string]map[string]bool) // [x][y]=>vote(x,y)
 	setVote := func(votes map[string]map[string]bool, x, y string, vote bool) {
 		if votes[x] == nil {
 			votes[x] = make(map[string]bool)
@@ -887,7 +887,7 @@ func (p *Poset) DecideFame() error {
 						}
 						setVote(votes, y, x, ycx)
 					} else {
-						//count votes
+						// count votes
 						var ssWitnesses []string
 						for _, w := range p.Store.RoundWitnesses(j - 1) {
 							ss, err := p.stronglySee(y, w)
@@ -914,20 +914,20 @@ func (p *Poset) DecideFame() error {
 							t = yays
 						}
 
-						//normal round
+						// normal round
 						if math.Mod(float64(diff), float64(p.Participants.Len())) > 0 {
 							if t >= p.superMajority {
 								roundInfo.SetFame(x, v)
 								setVote(votes, y, x, v)
-								break VOTE_LOOP //break out of j loop
+								break VOTE_LOOP // break out of j loop
 							} else {
 								setVote(votes, y, x, v)
 							}
-						} else { //coin round
+						} else { // coin round
 							if t >= p.superMajority {
 								setVote(votes, y, x, v)
 							} else {
-								setVote(votes, y, x, middleBit(y)) //middle bit of y's hash
+								setVote(votes, y, x, middleBit(y)) // middle bit of y's hash
 							}
 						}
 					}
@@ -950,8 +950,8 @@ func (p *Poset) DecideFame() error {
 	return nil
 }
 
-//DecideRoundReceived assigns a RoundReceived to undetermined events when they
-//reach consensus
+// DecideRoundReceived assigns a RoundReceived to undetermined events when they
+// reach consensus
 func (p *Poset) DecideRoundReceived() error {
 
 	var newUndeterminedEvents []string
@@ -973,7 +973,7 @@ func (p *Poset) DecideRoundReceived() error {
 
 			tr, err := p.Store.GetRound(i)
 			if err != nil {
-				//Can happen after a Reset/FastSync
+				// Can happen after a Reset/FastSync
 				if p.LastConsensusRound != nil &&
 					r < *p.LastConsensusRound {
 					received = true
@@ -982,15 +982,15 @@ func (p *Poset) DecideRoundReceived() error {
 				return err
 			}
 
-			//We are looping from earlier to later rounds; so if we encounter
-			//one round with undecided witnesses, we are sure that this event
-			//is not "received". Break out of i loop
+			// We are looping from earlier to later rounds; so if we encounter
+			// one round with undecided witnesses, we are sure that this event
+			// is not "received". Break out of i loop
 			if !(tr.WitnessesDecided()) {
 				break
 			}
 
 			fws := tr.FamousWitnesses()
-			//set of famous witnesses that see x
+			// set of famous witnesses that see x
 			var s []string
 			for _, w := range fws {
 				see, err := p.see(w, x)
@@ -1023,7 +1023,7 @@ func (p *Poset) DecideRoundReceived() error {
 					return err
 				}
 
-				//break out of i loop
+				// break out of i loop
 				break
 			}
 
@@ -1039,12 +1039,12 @@ func (p *Poset) DecideRoundReceived() error {
 	return nil
 }
 
-//ProcessDecidedRounds takes Rounds whose witnesses are decided, computes the
-//corresponding Frames, maps them into Blocks, and commits the Blocks via the
-//commit channel
+// ProcessDecidedRounds takes Rounds whose witnesses are decided, computes the
+// corresponding Frames, maps them into Blocks, and commits the Blocks via the
+// commit channel
 func (p *Poset) ProcessDecidedRounds() error {
 
-	//Defer removing processed Rounds from the PendingRounds Queue
+	// Defer removing processed Rounds from the PendingRounds Queue
 	processedIndex := 0
 	defer func() {
 		p.PendingRounds = p.PendingRounds[processedIndex:]
@@ -1052,18 +1052,18 @@ func (p *Poset) ProcessDecidedRounds() error {
 
 	for _, r := range p.PendingRounds {
 
-		//Although it is possible for a Round to be 'decided' before a previous
-		//round, we should NEVER process a decided round before all the previous
-		//rounds are processed.
+		// Although it is possible for a Round to be 'decided' before a previous
+		// round, we should NEVER process a decided round before all the previous
+		// rounds are processed.
 		if !r.Decided {
 			break
 		}
 
-		//This is similar to the lower bound introduced in DivideRounds; it is
-		//redundant in normal operations, but becomes necessary after a Reset.
-		//Indeed, after a Reset, LastConsensusRound is added to PendingRounds,
-		//but its ConsensusEvents (which are necessarily 'under' this Round) are
-		//already deemed committed. Hence, skip this Round after a Reset.
+		// This is similar to the lower bound introduced in DivideRounds; it is
+		// redundant in normal operations, but becomes necessary after a Reset.
+		// Indeed, after a Reset, LastConsensusRound is added to PendingRounds,
+		// but its ConsensusEvents (which are necessarily 'under' this Round) are
+		// already deemed committed. Hence, skip this Round after a Reset.
 		if p.LastConsensusRound != nil && r.Index == *p.LastConsensusRound {
 			continue
 		}
@@ -1125,16 +1125,16 @@ func (p *Poset) ProcessDecidedRounds() error {
 	return nil
 }
 
-//GetFrame computes the Frame corresponding to a RoundReceived.
+// GetFrame computes the Frame corresponding to a RoundReceived.
 func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 
-	//Try to get it from the Store first
+	// Try to get it from the Store first
 	frame, err := p.Store.GetFrame(roundReceived)
 	if err == nil || !common.Is(err, common.KeyNotFound) {
 		return frame, err
 	}
 
-	//Get the Round and corresponding consensus Events
+	// Get the Round and corresponding consensus Events
 	round, err := p.Store.GetRound(roundReceived)
 	if err != nil {
 		return Frame{}, err
@@ -1153,8 +1153,8 @@ func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 
 	// Get/Create Roots
 	roots := make(map[string]Root)
-	//The events are in topological order. Each time we run into the first Event
-	//of a participant, we create a Root for it.
+	// The events are in topological order. Each time we run into the first Event
+	// of a participant, we create a Root for it.
 	for _, ev := range events {
 		c := ev.Creator()
 		if _, ok := roots[c]; !ok {
@@ -1166,9 +1166,9 @@ func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 		}
 	}
 
-	//Every participant needs a Root in the Frame. For the participants that
-	//have no Events in this Frame, we create a Root from their last consensus
-	//Event, or their last known Root
+	// Every participant needs a Root in the Frame. For the participants that
+	// have no Events in this Frame, we create a Root from their last consensus
+	// Event, or their last known Root
 	for _, peer := range p.Participants.ToPubKeySlice() {
 		if _, ok := roots[peer]; !ok {
 			var root Root
@@ -1192,11 +1192,11 @@ func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 		}
 	}
 
-	//Some Events in the Frame might have other-parents that are outside of the
-	//Frame (cf root.go ex 2)
-	//When inserting these Events in a newly reset poset, the CheckOtherParent
-	//method would return an error because the other-parent would not be found.
-	//So we make it possible to also look for other-parents in the creator's Root.
+	// Some Events in the Frame might have other-parents that are outside of the
+	// Frame (cf root.go ex 2)
+	// When inserting these Events in a newly reset poset, the CheckOtherParent
+	// method would return an error because the other-parent would not be found.
+	// So we make it possible to also look for other-parents in the creator's Root.
 	treated := map[string]bool{}
 	for _, ev := range events {
 		treated[ev.Hex()] = true
@@ -1215,7 +1215,7 @@ func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 		}
 	}
 
-	//order roots
+	// order roots
 	orderedRoots := make([]Root, p.Participants.Len())
 	for i, peer := range p.Participants.ToPeerSlice() {
 		orderedRoots[i] = roots[peer.PubKeyHex]
@@ -1234,15 +1234,15 @@ func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 	return res, nil
 }
 
-//ProcessSigPool runs through the SignaturePool and tries to map a Signature to
-//a known Block. If a Signature is found to be valid for a known Block, it is
-//appended to the block and removed from the SignaturePool
+// ProcessSigPool runs through the SignaturePool and tries to map a Signature to
+// a known Block. If a Signature is found to be valid for a known Block, it is
+// appended to the block and removed from the SignaturePool
 func (p *Poset) ProcessSigPool() error {
-	processedSignatures := map[int]bool{} //index in SigPool => Processed?
+	processedSignatures := map[int]bool{} // index in SigPool => Processed?
 	defer p.removeProcessedSignatures(processedSignatures)
 
 	for i, bs := range p.SigPool {
-		//check if validator belongs to list of participants
+		// check if validator belongs to list of participants
 		validatorHex := fmt.Sprintf("0x%X", bs.Validator)
 		if _, ok := p.Participants.ByPubKey[validatorHex]; !ok {
 			p.logger.WithFields(logrus.Fields{
@@ -1251,7 +1251,7 @@ func (p *Poset) ProcessSigPool() error {
 			}).Warning("Verifying Block signature. Unknown validator")
 			continue
 		}
-		//only check if bs is greater than AnchorBlock, otherwise simply remove
+		// only check if bs is greater than AnchorBlock, otherwise simply remove
 		if p.AnchorBlock == nil ||
 			bs.Index > *p.AnchorBlock {
 			block, err := p.Store.GetBlock(bs.Index)
@@ -1306,8 +1306,8 @@ func (p *Poset) ProcessSigPool() error {
 	return nil
 }
 
-//GetAnchorBlockWithFrame returns the AnchorBlock and the corresponding Frame.
-//This can be used as a base to Reset a Poset
+// GetAnchorBlockWithFrame returns the AnchorBlock and the corresponding Frame.
+// This can be used as a base to Reset a Poset
 func (p *Poset) GetAnchorBlockWithFrame() (Block, Frame, error) {
 
 	if p.AnchorBlock == nil {
@@ -1327,10 +1327,10 @@ func (p *Poset) GetAnchorBlockWithFrame() (Block, Frame, error) {
 	return block, frame, nil
 }
 
-//Reset clears the Poset and resets it from a new base.
+// Reset clears the Poset and resets it from a new base.
 func (p *Poset) Reset(block Block, frame Frame) error {
 
-	//Clear all state
+	// Clear all state
 	p.LastConsensusRound = nil
 	p.FirstConsensusRound = nil
 	p.AnchorBlock = nil
@@ -1348,7 +1348,7 @@ func (p *Poset) Reset(block Block, frame Frame) error {
 
 	participants := p.Participants.ToPeerSlice()
 
-	//Initialize new Roots
+	// Initialize new Roots
 	rootMap := map[string]Root{}
 	for id, root := range frame.Roots {
 		p := participants[id]
@@ -1358,14 +1358,14 @@ func (p *Poset) Reset(block Block, frame Frame) error {
 		return err
 	}
 
-	//Insert Block
+	// Insert Block
 	if err := p.Store.SetBlock(block); err != nil {
 		return err
 	}
 
 	p.setLastConsensusRound(block.RoundReceived())
 
-	//Insert Frame Events
+	// Insert Frame Events
 	for _, ev := range frame.Events {
 		if err := p.InsertEvent(ev, false); err != nil {
 			return err
@@ -1375,27 +1375,27 @@ func (p *Poset) Reset(block Block, frame Frame) error {
 	return nil
 }
 
-//Bootstrap loads all Events from the Store's DB (if there is one) and feeds
-//them to the Poset (in topological order) for consensus ordering. After this
-//method call, the Poset should be in a state coherent with the 'tip' of the
-//Poset
+// Bootstrap loads all Events from the Store's DB (if there is one) and feeds
+// them to the Poset (in topological order) for consensus ordering. After this
+// method call, the Poset should be in a state coherent with the 'tip' of the
+// Poset
 func (p *Poset) Bootstrap() error {
 	if badgerStore, ok := p.Store.(*BadgerStore); ok {
-		//Retreive the Events from the underlying DB. They come out in topological
-		//order
+		// Retreive the Events from the underlying DB. They come out in topological
+		// order
 		topologicalEvents, err := badgerStore.dbTopologicalEvents()
 		if err != nil {
 			return err
 		}
 
-		//Insert the Events in the Poset
+		// Insert the Events in the Poset
 		for _, e := range topologicalEvents {
 			if err := p.InsertEvent(e, true); err != nil {
 				return err
 			}
 		}
 
-		//Compute the consensus order of Events
+		// Compute the consensus order of Events
 		if err := p.DivideRounds(); err != nil {
 			return err
 		}
@@ -1416,8 +1416,8 @@ func (p *Poset) Bootstrap() error {
 	return nil
 }
 
-//ReadWireInfo converts a WireEvent to an Event by replacing int IDs with the
-//corresponding public keys.
+// ReadWireInfo converts a WireEvent to an Event by replacing int IDs with the
+// corresponding public keys.
 func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	selfParent := rootSelfParent(wevent.Body.CreatorID)
 	otherParent := ""
@@ -1439,14 +1439,14 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 		otherParentCreator := p.Participants.ById[wevent.Body.OtherParentCreatorID]
 		otherParent, err = p.Store.ParticipantEvent(otherParentCreator.PubKeyHex, wevent.Body.OtherParentIndex)
 		if err != nil {
-			//PROBLEM Check if other parent can be found in the root
-			//problem, we do not known the WireEvent's EventHash, and
-			//we do not know the creators of the roots RootEvents
+			// PROBLEM Check if other parent can be found in the root
+			// problem, we do not known the WireEvent's EventHash, and
+			// we do not know the creators of the roots RootEvents
 			root, err := p.Store.GetRoot(creator.PubKeyHex)
 			if err != nil {
 				return nil, err
 			}
-			//loop through others
+			// loop through others
 			found := false
 			for _, re := range root.Others {
 				if re.CreatorID == wevent.Body.OtherParentCreatorID &&
@@ -1490,8 +1490,8 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	return event, nil
 }
 
-//CheckBlock returns an error if the Block does not contain valid signatures
-//from MORE than 1/3 of participants
+// CheckBlock returns an error if the Block does not contain valid signatures
+// from MORE than 1/3 of participants
 func (p *Poset) CheckBlock(block Block) error {
 	validSignatures := 0
 	for _, s := range block.GetSignatures() {
