@@ -274,7 +274,7 @@ func TestSync(t *testing.T) {
 	if core0Head.SelfParent() != index["e0"] {
 		t.Fatalf("core 0 head self-parent should be e0")
 	}
-	if core0Head.OtherParent() != index["e1"] {
+	if core0Head.OtherParent(0) != index["e1"] {
 		t.Fatalf("core 0 head other-parent should be e1")
 	}
 	if len(core0Head.FlagTable) == 0 {
@@ -332,7 +332,7 @@ func TestSync(t *testing.T) {
 	if core2Head.SelfParent() != index["e2"] {
 		t.Fatalf("core 2 head self-parent should be e2")
 	}
-	if core2Head.OtherParent() != index["e01"] {
+	if core2Head.OtherParent(0) != index["e01"] {
 		t.Fatalf("core 2 head other-parent should be e01")
 	}
 	index["e20"] = core2Head.Hex()
@@ -388,7 +388,7 @@ func TestSync(t *testing.T) {
 	if core1Head.SelfParent() != index["e1"] {
 		t.Fatalf("core 1 head self-parent should be e1")
 	}
-	if core1Head.OtherParent() != index["e20"] {
+	if core1Head.OtherParent(0) != index["e20"] {
 		t.Fatalf("core 1 head other-parent should be e20")
 	}
 	index["e12"] = core1Head.Hex()

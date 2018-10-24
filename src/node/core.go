@@ -172,7 +172,7 @@ func (c *Core) bootstrapInDegrees() {
 				if err != nil {
 					continue
 				}
-				if event.OtherParent() == eventHash {
+				if event.OtherParent(0) == eventHash {
 					c.inDegrees[pubKey]++
 				}
 			}
@@ -204,7 +204,7 @@ func (c *Core) InsertEvent(event poset.Event, setWireInfo bool) error {
 
 	c.inDegrees[event.Creator()] = 0
 
-	if otherEvent, err := c.poset.Store.GetEvent(event.OtherParent()); err == nil {
+	if otherEvent, err := c.poset.Store.GetEvent(event.OtherParent(0)); err == nil {
 		c.inDegrees[otherEvent.Creator()]++
 	}
 	return nil
