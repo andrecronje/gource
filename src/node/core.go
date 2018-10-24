@@ -172,8 +172,10 @@ func (c *Core) bootstrapInDegrees() {
 				if err != nil {
 					continue
 				}
-				if event.OtherParent(0) == eventHash {
-					c.inDegrees[pubKey]++
+				for _, othrerParentHash := range event.OtherParents() {
+					if othrerParentHash == eventHash {
+						c.inDegrees[pubKey]++
+					}
 				}
 			}
 		}
@@ -203,9 +205,10 @@ func (c *Core) InsertEvent(event poset.Event, setWireInfo bool) error {
 	}
 
 	c.inDegrees[event.Creator()] = 0
-
-	if otherEvent, err := c.poset.Store.GetEvent(event.OtherParent(0)); err == nil {
-		c.inDegrees[otherEvent.Creator()]++
+	for _, otherParentHash := range event.OtherParents() {
+		if otherEvent, err := c.poset.Store.GetEvent(otherParentHash); err == nil {
+			c.inDegrees[otherEvent.Creator()]++
+		}
 	}
 	return nil
 }
