@@ -410,7 +410,6 @@ func (p *Poset) checkSelfParent(event Event) error {
 		"event":            event.Hex(),
 	}).Debugf("checkSelfParent")
 
-
 	if err != nil {
 		return err
 	}
@@ -654,8 +653,6 @@ func (p *Poset) createRoot(ev Event) (Root, error) {
 
 func (p *Poset) setWireInfo(event *Event) error {
 	selfParentIndex := -1
-	otherParentCreatorID := -1
-	otherParentIndex := -1
 
 	// could be the first Event inserted for this creator. In this case, use Root
 	if lf, isRoot, _ := p.Store.LastEventFrom(event.Creator()); isRoot && lf == event.SelfParent() {
@@ -672,28 +669,39 @@ func (p *Poset) setWireInfo(event *Event) error {
 		selfParentIndex = selfParent.Index()
 	}
 
-	if event.OtherParent(0) != "" {
-		// Check Root then regular Events
-		root, err := p.Store.GetRoot(event.Creator())
-		if err != nil {
-			return err
-		}
-		if other, ok := root.Others[event.Hex()]; ok && other.Hash == event.OtherParent(0) {
-			otherParentCreatorID = other.CreatorID
-			otherParentIndex = other.Index
-		} else {
-			otherParent, err := p.Store.GetEvent(event.OtherParent(0))
+	otherParents := event.OtherParents()
+	otherParentCreatorIDs := make([]int, len(otherParents))
+	otherParentIndexes := make([]int, len(otherParents))
+	for i := range otherParents {
+		otherParentCreatorIDs[i] = -1
+		otherParentIndexes[i] = -1
+	}
+
+	for i, otherParentHash := range otherParents {
+		if otherParentHash != "" {
+			// Check Root then regular Events
+			root, err := p.Store.GetRoot(event.Creator())
 			if err != nil {
 				return err
 			}
-			otherParentCreatorID = p.Participants.ByPubKey[otherParent.Creator()].ID
-			otherParentIndex = otherParent.Index()
+
+			if other, ok := root.Others[event.Hex()]; ok && other.Hash == otherParentHash {
+				otherParentCreatorIDs[i] = other.CreatorID
+				otherParentIndexes[i] = other.Index
+			} else {
+				otherParent, err := p.Store.GetEvent(otherParentHash)
+				if err != nil {
+					return err
+				}
+				otherParentCreatorIDs[i] = p.Participants.ByPubKey[otherParent.Creator()].ID
+				otherParentIndexes[i] = otherParent.Index()
+			}
 		}
 	}
 
 	event.SetWireInfo(selfParentIndex,
-		otherParentCreatorID,
-		otherParentIndex,
+		otherParentCreatorIDs,
+		otherParentIndexes,
 		p.Participants.ByPubKey[event.Creator()].ID)
 
 	return nil
@@ -1429,7 +1437,6 @@ func (p *Poset) Bootstrap() error {
 // corresponding public keys.
 func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	selfParent := rootSelfParent(wevent.Body.CreatorID)
-	otherParent := ""
 	var err error
 
 	creator := p.Participants.ById[wevent.Body.CreatorID]
@@ -1444,32 +1451,35 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 			return nil, err
 		}
 	}
-	if wevent.Body.OtherParentIndex >= 0 {
-		otherParentCreator := p.Participants.ById[wevent.Body.OtherParentCreatorID]
-		otherParent, err = p.Store.ParticipantEvent(otherParentCreator.PubKeyHex, wevent.Body.OtherParentIndex)
-		if err != nil {
-			// PROBLEM Check if other parent can be found in the root
-			// problem, we do not known the WireEvent's EventHash, and
-			// we do not know the creators of the roots RootEvents
-			root, err := p.Store.GetRoot(creator.PubKeyHex)
+
+	otherParent := make([]string, len(wevent.Body.OtherParentIndexes))
+	for i, otherParentIndex := range wevent.Body.OtherParentIndexes {
+		if otherParentIndex >= 0 {
+			otherParentCreator := p.Participants.ById[wevent.Body.OtherParentCreatorIDs[i]]
+			otherParent[i], err = p.Store.ParticipantEvent(otherParentCreator.PubKeyHex, otherParentIndex)
 			if err != nil {
-				return nil, err
-			}
-			// loop through others
-			found := false
-			for _, re := range root.Others {
-				if re.CreatorID == wevent.Body.OtherParentCreatorID &&
-					re.Index == wevent.Body.OtherParentIndex {
-					otherParent = re.Hash
-					found = true
-					break
+				// PROBLEM Check if other parent can be found in the root
+				// problem, we do not known the WireEvent's EventHash, and
+				// we do not know the creators of the roots RootEvents
+				root, err := p.Store.GetRoot(creator.PubKeyHex)
+				if err != nil {
+					return nil, err
+				}
+				// loop through others
+				found := false
+				for _, re := range root.Others {
+					if re.CreatorID == wevent.Body.OtherParentCreatorIDs[i] &&
+						re.Index == wevent.Body.OtherParentIndexes[i] {
+						otherParent[i] = re.Hash
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					return nil, fmt.Errorf("OtherParent not found")
 				}
 			}
-
-			if !found {
-				return nil, fmt.Errorf("OtherParent not found")
-			}
-
 		}
 	}
 
@@ -1477,17 +1487,19 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 		return nil, fmt.Errorf("flag table is null")
 	}
 
+	parents := append([]string{selfParent}, otherParent...)
+
 	body := EventBody{
 		Transactions:    wevent.Body.Transactions,
 		BlockSignatures: wevent.BlockSignatures(creatorBytes),
-		Parents:         []string{selfParent, otherParent},
+		Parents:         parents,
 		Creator:         creatorBytes,
 
-		Index:                wevent.Body.Index,
-		selfParentIndex:      wevent.Body.SelfParentIndex,
-		otherParentCreatorID: wevent.Body.OtherParentCreatorID,
-		otherParentIndex:     wevent.Body.OtherParentIndex,
-		creatorID:            wevent.Body.CreatorID,
+		Index:                 wevent.Body.Index,
+		selfParentIndex:       wevent.Body.SelfParentIndex,
+		otherParentCreatorIDs: wevent.Body.OtherParentCreatorIDs,
+		otherParentIndexes:    wevent.Body.OtherParentIndexes,
+		creatorID:             wevent.Body.CreatorID,
 	}
 
 	event := &Event{
