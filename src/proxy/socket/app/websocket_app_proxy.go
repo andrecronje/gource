@@ -15,7 +15,9 @@ import (
 )
 
 type WebsocketAppProxy struct {
-	conn      *birpc.Connector
+	//Save conn and not clients
+	conn      map[*birpc.Connector]struct{}
+	connMu    sync.Mutex
 	rpcServer *rpc.Server
 
 	clients  map[*rpc.Client]struct{} // TODO: remove clients on disconnect. websocket ping-pong?
@@ -33,7 +35,15 @@ func NewWebsocketAppProxy(bindAddr string, timeout time.Duration, logger *logrus
 		logger.Level = logrus.DebugLevel
 	}
 
+	logger.WithFields(logrus.Fields{
+		"bindAddr":     bindAddr,
+		"timeout":      timeout,
+	}).Debug("NewWebsocketAppProxy")
+
+
+
 	proxy := WebsocketAppProxy{
+		conn:     make(map[*birpc.Connector]struct{}),
 		clients:  make(map[*rpc.Client]struct{}),
 		submitCh: make(chan []byte),
 		timeout:  timeout,
@@ -48,6 +58,9 @@ func NewWebsocketAppProxy(bindAddr string, timeout time.Duration, logger *logrus
 func (p *WebsocketAppProxy) listen(w http.ResponseWriter, r *http.Request) {
 	upgrader := ws.Upgrader{}
 
+	p.logger.Debug("func (p *WebsocketAppProxy) listen")
+
+	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		http.Error(w, "Failed to Upgrade", http.StatusInternalServerError)
@@ -55,17 +68,16 @@ func (p *WebsocketAppProxy) listen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if p.conn != nil {
-		return
-	}
-
 	// setup rpc
-	p.conn = birpc.New(c)
+	conn := birpc.New(c, p.logger)
+	//p.addClient(jsonrpc.NewClient(&p.conn.Client))
+	p.addConn(conn)
+
 	rpcServer := rpc.NewServer()
 	rpcServer.RegisterName("Lachesis", p)
-	p.rpcServer = rpcServer
-	p.addClient(jsonrpc.NewClient(&p.conn.Client))
-	go p.rpcServer.ServeCodec(jsonrpc.NewServerCodec(&p.conn.Server))
+
+	p.logger.Debug("go p.rpcServer.ServeCodec(jsonrpc.NewServerCodec(&p.conn.Server))")
+	go rpcServer.ServeCodec(jsonrpc.NewServerCodec(&conn.Server))
 }
 
 func (p *WebsocketAppProxy) addClient(c *rpc.Client) {
@@ -73,9 +85,14 @@ func (p *WebsocketAppProxy) addClient(c *rpc.Client) {
 	p.clients[c] = struct{}{}
 	p.clientMu.Unlock()
 }
+func (p *WebsocketAppProxy) addConn(c *birpc.Connector) {
+	p.connMu.Lock()
+	p.conn[c] = struct{}{}
+	p.connMu.Unlock()
+}
 
 func (p *WebsocketAppProxy) SubmitTx(tx []byte, ack *bool) error {
-	p.logger.Debug("SubmitTx")
+	p.logger.Debug("SubmitTx(tx []byte, ack *bool)")
 	p.submitCh <- tx
 
 	*ack = true
@@ -91,15 +108,25 @@ func (p *WebsocketAppProxy) SubmitCh() chan []byte {
 }
 
 func (p *WebsocketAppProxy) CommitBlock(block poset.Block) ([]byte, error) {
+	p.logger.Debug("CommitBlock(block poset.Block)")
 	var stateHash proto.StateHash
 
 	p.clientMu.Lock()
 	defer p.clientMu.Unlock()
 
-	for c := range p.clients {
-		if err := c.Call("State.CommitBlock", block, &stateHash); err != nil {
+	p.logger.WithField("Clients", len(p.clients)).Debug("p.clients")
+	for c, _ := range p.conn {
+		if err := jsonrpc.NewClient(&c.Client).Call("State.CommitBlock", block, &stateHash); err != nil {
+			p.logger.WithError(err).Debug("c.Call(, block, &stateHash)")
 			return []byte{}, err
 		}
+		//Don't do an RPC call here, need to send to WS writer output
+
+
+		/*if err := c.Call("State.CommitBlock", block, &stateHash); err != nil {
+			p.logger.WithError(err).Debug("c.Call(, block, &stateHash)")
+			return []byte{}, err
+		}*/
 	}
 
 	p.logger.WithFields(logrus.Fields{
