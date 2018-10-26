@@ -423,23 +423,25 @@ func (p *Poset) checkSelfParent(event Event) error {
 	return nil
 }
 
-// Check if we know the OtherParent
-func (p *Poset) checkOtherParent(event Event) error {
-	otherParent := event.OtherParent(0)
-	if otherParent != "" {
-		// Check if we have it
-		_, err := p.Store.GetEvent(otherParent)
-		if err != nil {
-			// it might still be in the Root
-			root, err := p.Store.GetRoot(event.Creator())
+// Check if we know the OtherParents
+func (p *Poset) checkOtherParents(event Event) error {
+	otherParents := event.OtherParents()
+	for _, otherParent := range otherParents {
+		if otherParent != "" {
+			// Check if we have it
+			_, err := p.Store.GetEvent(otherParent)
 			if err != nil {
-				return err
+				// it might still be in the Root
+				root, err := p.Store.GetRoot(event.Creator())
+				if err != nil {
+					continue
+				}
+				other, ok := root.Others[event.Hex()]
+				if ok && other.Hash == otherParent {
+					continue
+				}
+				return fmt.Errorf("other-parent not known %s", otherParent)
 			}
-			other, ok := root.Others[event.Hex()]
-			if ok && other.Hash == event.OtherParent(0) {
-				return nil
-			}
-			return fmt.Errorf("Other-parent not known")
 		}
 	}
 	return nil
@@ -745,8 +747,8 @@ func (p *Poset) InsertEvent(event Event, setWireInfo bool) error {
 		return fmt.Errorf("CheckSelfParent: %s", err)
 	}
 
-	if err := p.checkOtherParent(event); err != nil {
-		return fmt.Errorf("CheckOtherParent: %s", err)
+	if err := p.checkOtherParents(event); err != nil {
+		return fmt.Errorf("CheckOtherParents: %s", err)
 	}
 
 	event.topologicalIndex = p.topologicalIndex
