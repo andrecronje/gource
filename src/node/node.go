@@ -29,7 +29,6 @@ type Node struct {
 	localAddr string
 
 	peerSelector PeerSelector
-	selectorLock sync.Mutex
 
 	trans net.Transport
 	netCh <-chan net.RPC
@@ -144,13 +143,13 @@ func (n *Node) Run(gossip bool) {
 func (n *Node) resetTimer() {
 	if !n.controlTimer.set {
 		ts := n.conf.HeartbeatTimeout
- 		//Slow gossip if nothing interesting to say
+		// Slow gossip if nothing interesting to say
 		if n.core.poset.PendingLoadedEvents == 0 &&
 			len(n.core.transactionPool) == 0 &&
 			len(n.core.blockSignaturePool) == 0 {
 			ts = time.Duration(time.Second)
 		}
- 		n.controlTimer.resetCh <- ts
+		n.controlTimer.resetCh <- ts
 	}
 }
 
@@ -360,9 +359,7 @@ func (n *Node) gossip(peerAddr string, parentReturnCh chan struct{}) error {
 	}
 
 	// update peer selector
-	n.selectorLock.Lock()
 	n.peerSelector.UpdateLast(peerAddr)
-	n.selectorLock.Unlock()
 
 	n.logStats()
 
@@ -429,7 +426,6 @@ func (n *Node) push(peerAddr string, knownEvents map[int]int) error {
 		n.logger.WithField("Error", err).Error("n.core.EventDiff(knownEvents)")
 		return err
 	}
-
 
 	if len(eventDiff) > 0 {
 		// Convert to WireEvents
@@ -729,7 +725,7 @@ func (n *Node) GetKnownEvents() map[int]int {
 
 func (n *Node) GetEvents() (map[int]int, error) {
 	res := n.core.KnownEvents()
- 	return res, nil
+	return res, nil
 }
 
 func (n *Node) GetConsensusEvents() []string {
