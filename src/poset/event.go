@@ -151,19 +151,24 @@ func (e *Event) Creator() string {
 }
 
 func (e *Event) SelfParent() string {
-	return e.Body.Parents[0]
+	if len(e.Body.Parents) > 0 {
+		return e.Body.Parents[0]
+	}
+	return ""
 }
 
 func (e *Event) OtherParent(n int) string {
-	otherParent := e.Body.Parents[1:]
-	if n >= 0 && n < len(otherParent) {
-		return otherParent[n]
+	if n >= 0 && n < len(e.Body.Parents)-1 {
+		return e.Body.Parents[1:][n]
 	}
 	return ""
 }
 
 func (e *Event) OtherParents() []string {
-	return e.Body.Parents[1:]
+	if len(e.Body.Parents) > 0 {
+		return e.Body.Parents[1:]
+	}
+	return []string{}
 }
 
 func (e *Event) Transactions() [][]byte {
