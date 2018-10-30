@@ -446,8 +446,8 @@ func TestInsertEvent(t *testing.T) {
 		}
 
 		if !(e0.Body.selfParentIndex == -1 &&
-			e0.Body.otherParentCreatorID == -1 &&
-			e0.Body.otherParentIndex == -1 &&
+			e0.Body.otherParentCreatorIDs[0] == -1 &&
+			e0.Body.otherParentIndexes[0] == -1 &&
 			e0.Body.creatorID == h.Participants.ByPubKey[e0.Creator()].ID) {
 			t.Fatalf("Invalid wire info on e0")
 		}
@@ -483,8 +483,8 @@ func TestInsertEvent(t *testing.T) {
 		}
 
 		if !(e21.Body.selfParentIndex == 1 &&
-			e21.Body.otherParentCreatorID == h.Participants.ByPubKey[e10.Creator()].ID &&
-			e21.Body.otherParentIndex == 1 &&
+			e21.Body.otherParentCreatorIDs[0] == h.Participants.ByPubKey[e10.Creator()].ID &&
+			e21.Body.otherParentIndexes[0] == 1 &&
 			e21.Body.creatorID == h.Participants.ByPubKey[e21.Creator()].ID) {
 			t.Fatalf("Invalid wire info on e21")
 		}
@@ -515,8 +515,8 @@ func TestInsertEvent(t *testing.T) {
 		}
 
 		if !(f1.Body.selfParentIndex == 2 &&
-			f1.Body.otherParentCreatorID == h.Participants.ByPubKey[e0.Creator()].ID &&
-			f1.Body.otherParentIndex == 2 &&
+			f1.Body.otherParentCreatorIDs[0] == h.Participants.ByPubKey[e0.Creator()].ID &&
+			f1.Body.otherParentIndexes[0] == 2 &&
 			f1.Body.creatorID == h.Participants.ByPubKey[f1.Creator()].ID) {
 			t.Fatalf("Invalid wire info on f1")
 		}
