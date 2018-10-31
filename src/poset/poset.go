@@ -1121,12 +1121,14 @@ func (p *Poset) ProcessDecidedRounds() error {
 			if err != nil {
 				return err
 			}
-			if err := p.Store.SetBlock(block); err != nil {
-				return err
-			}
+			if len(block.Transactions()) > 0 {
+				if err := p.Store.SetBlock(block); err != nil {
+					return err
+				}
 
-			if p.commitCh != nil {
-				p.commitCh <- block
+				if p.commitCh != nil {
+					p.commitCh <- block
+				}
 			}
 
 		} else {
@@ -1458,6 +1460,7 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	for i, otherParentIndex := range wevent.Body.OtherParentIndexes {
 		if otherParentIndex >= 0 {
 			otherParentCreator := p.Participants.ById[wevent.Body.OtherParentCreatorIDs[i]]
+			if otherParentCreator != nil {
 			otherParent[i], err = p.Store.ParticipantEvent(otherParentCreator.PubKeyHex, otherParentIndex)
 			if err != nil {
 				// PROBLEM Check if other parent can be found in the root
@@ -1481,6 +1484,11 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 				if !found {
 					return nil, fmt.Errorf("OtherParent not found")
 				}
+			}
+			} else {
+				// unknown participant
+				// TODO: we should handle this nicely
+				return nil, errors.New("unknown participant")
 			}
 		}
 	}
