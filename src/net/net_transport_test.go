@@ -39,13 +39,13 @@ func TestNetworkTransport_Sync(t *testing.T) {
 	resp := SyncResponse{
 		FromID: 1,
 		Events: []poset.WireEvent{
-			poset.WireEvent{
+			{
 				Body: poset.WireBody{
-					Transactions:         [][]byte(nil),
-					SelfParentIndex:      1,
-					OtherParentCreatorID: 10,
-					OtherParentIndex:     0,
-					CreatorID:            9,
+					Transactions:          [][]byte(nil),
+					SelfParentIndex:       1,
+					OtherParentCreatorIDs: []int{10},
+					OtherParentIndexes:    []int{0},
+					CreatorID:             9,
 				},
 			},
 		},
@@ -106,11 +106,11 @@ func TestNetworkTransport_EagerSync(t *testing.T) {
 		Events: []poset.WireEvent{
 			poset.WireEvent{
 				Body: poset.WireBody{
-					Transactions:         [][]byte(nil),
-					SelfParentIndex:      1,
-					OtherParentCreatorID: 10,
-					OtherParentIndex:     0,
-					CreatorID:            9,
+					Transactions:          [][]byte(nil),
+					SelfParentIndex:       1,
+					OtherParentCreatorIDs: []int{10},
+					OtherParentIndexes:    []int{0},
+					CreatorID:             9,
 				},
 			},
 		},
@@ -178,11 +178,11 @@ func TestNetworkTransport_PooledConn(t *testing.T) {
 		Events: []poset.WireEvent{
 			poset.WireEvent{
 				Body: poset.WireBody{
-					Transactions:         [][]byte(nil),
-					SelfParentIndex:      1,
-					OtherParentCreatorID: 10,
-					OtherParentIndex:     0,
-					CreatorID:            9,
+					Transactions:          [][]byte(nil),
+					SelfParentIndex:       1,
+					OtherParentCreatorIDs: []int{10},
+					OtherParentIndexes:    []int{0},
+					CreatorID:             9,
 				},
 			},
 		},

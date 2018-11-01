@@ -12,10 +12,11 @@ import (
 
 	"github.com/andrecronje/lachesis/src/common"
 	"github.com/andrecronje/lachesis/src/crypto"
-	dummy "github.com/andrecronje/lachesis/src/dummy"
+	"github.com/andrecronje/lachesis/src/dummy"
 	"github.com/andrecronje/lachesis/src/net"
 	peers_ "github.com/andrecronje/lachesis/src/peers"
 	"github.com/andrecronje/lachesis/src/poset"
+	"github.com/andrecronje/lachesis/src/proxy"
 	"github.com/sirupsen/logrus"
 )
 
@@ -56,7 +57,7 @@ func TestProcessSync(t *testing.T) {
 	node0 := NewNode(config, peers[0].ID, keys[0], p,
 		poset.NewInmemStore(p, config.CacheSize),
 		peer0Trans,
-		dummy.NewInmemDummyClient(testLogger))
+		dummy.NewInmemDummyApp(testLogger))
 	node0.Init()
 
 	node0.RunAsync(false)
@@ -70,7 +71,7 @@ func TestProcessSync(t *testing.T) {
 	node1 := NewNode(config, peers[1].ID, keys[1], p,
 		poset.NewInmemStore(p, config.CacheSize),
 		peer1Trans,
-		dummy.NewInmemDummyClient(testLogger))
+		dummy.NewInmemDummyApp(testLogger))
 	node1.Init()
 
 	node1.RunAsync(false)
@@ -152,7 +153,7 @@ func TestProcessEagerSync(t *testing.T) {
 	node0 := NewNode(config, peers[0].ID, keys[0], p,
 		poset.NewInmemStore(p, config.CacheSize),
 		peer0Trans,
-		dummy.NewInmemDummyClient(testLogger))
+		dummy.NewInmemDummyApp(testLogger))
 	node0.Init()
 
 	node0.RunAsync(false)
@@ -166,7 +167,7 @@ func TestProcessEagerSync(t *testing.T) {
 	node1 := NewNode(config, peers[1].ID, keys[1], p,
 		poset.NewInmemStore(p, config.CacheSize),
 		peer1Trans,
-		dummy.NewInmemDummyClient(testLogger))
+		dummy.NewInmemDummyApp(testLogger))
 	node1.Init()
 
 	node1.RunAsync(false)
@@ -223,7 +224,7 @@ func TestAddTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	peer0Proxy := dummy.NewInmemDummyClient(testLogger)
+	peer0Proxy := dummy.NewInmemDummyApp(testLogger)
 	defer peer0Trans.Close()
 
 	node0 := NewNode(TestConfig(t), peers[0].ID, keys[0], p,
@@ -238,7 +239,7 @@ func TestAddTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	peer1Proxy := dummy.NewInmemDummyClient(testLogger)
+	peer1Proxy := dummy.NewInmemDummyApp(testLogger)
 	defer peer1Trans.Close()
 
 	node1 := NewNode(TestConfig(t), peers[1].ID, keys[1], p,
@@ -251,7 +252,7 @@ func TestAddTransaction(t *testing.T) {
 	// Submit a Tx to node0
 
 	message := "Hello World!"
-	peer0Proxy.SubmitTx([]byte(message))
+	peer0Proxy.(*proxy.InmemAppProxy).SubmitTx([]byte(message))
 
 	// simulate a SyncRequest from node0 to node1
 
@@ -328,7 +329,7 @@ func initNodes(keys []*ecdsa.PrivateKey,
 		case "inmem":
 			store = poset.NewInmemStore(peers, conf.CacheSize)
 		}
-		prox := dummy.NewInmemDummyClient(logger)
+		prox := dummy.NewInmemDummyApp(logger)
 		node := NewNode(conf,
 			id,
 			k,
@@ -376,7 +377,7 @@ func recycleNode(oldNode *Node, logger *logrus.Logger, t *testing.T) *Node {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prox := dummy.NewInmemDummyClient(logger)
+	prox := dummy.NewInmemDummyApp(logger)
 
 	newNode := NewNode(conf, id, key, peers, store, trans, prox)
 
@@ -400,23 +401,6 @@ func shutdownNodes(nodes []*Node) {
 	for _, n := range nodes {
 		n.Shutdown()
 	}
-}
-
-func deleteStores(nodes []*Node, t *testing.T) {
-	for _, n := range nodes {
-		if err := os.RemoveAll(n.core.poset.Store.StorePath()); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func getCommittedTransactions(n *Node) ([][]byte, error) {
-	InmemAppProxy, ok := n.proxy.(*dummy.InmemDummyClient)
-	if !ok {
-		return nil, fmt.Errorf("error casting to InmemProp")
-	}
-	res := InmemAppProxy.GetCommittedTransactions()
-	return res, nil
 }
 
 func TestGossip(t *testing.T) {
@@ -649,7 +633,8 @@ func TestShutdown(t *testing.T) {
 
 	nodes[0].Shutdown()
 
-	err := nodes[1].gossip(nodes[0].localAddr, nil)
+	peer := peers.ByPubKey[nodes[0].core.hexID]
+	err := nodes[1].gossip([]*peers_.Peer{peer}, nil)
 	if err == nil {
 		t.Fatal("Expected Timeout Error")
 	}
@@ -789,7 +774,7 @@ func makeRandomTransactions(nodes []*Node, quit chan struct{}) {
 }
 
 func submitTransaction(n *Node, tx []byte) error {
-	prox, ok := n.proxy.(*dummy.InmemDummyClient)
+	prox, ok := n.proxy.(*proxy.InmemAppProxy)
 	if !ok {
 		return fmt.Errorf("error casting to InmemProp")
 	}
