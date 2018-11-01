@@ -61,7 +61,7 @@ func (p *Peers) AddPeer(peer *Peer) {
 }
 
 func (p *Peers) internalSort() {
-	res := []*Peer{}
+	var res []*Peer
 
 	for _, p := range p.ByPubKey {
 		res = append(res, p)
@@ -106,7 +106,7 @@ func (p *Peers) ToPubKeySlice() []string {
 	p.RLock()
 	defer p.RUnlock()
 
-	res := []string{}
+	var res []string
 
 	for _, peer := range p.Sorted {
 		res = append(res, peer.PubKeyHex)
@@ -119,7 +119,7 @@ func (p *Peers) ToIDSlice() []int {
 	p.RLock()
 	defer p.RUnlock()
 
-	res := []int{}
+	var res []int
 
 	for _, peer := range p.Sorted {
 		res = append(res, peer.ID)

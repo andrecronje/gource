@@ -192,8 +192,8 @@ func (n *Node) lachesis(gossip bool) {
 		case <-n.controlTimer.tickCh:
 			if gossip {
 				n.logger.Debug("Gossip")
-				peer := n.peerSelector.Next()
-				n.goFunc(func() { n.gossip(peer.NetAddr, returnCh) })
+				peersSlice := n.peerSelector.NextN(1)
+				n.goFunc(func() { n.gossip(peersSlice, returnCh) })
 			}
 			n.resetTimer()
 		case <-returnCh:
@@ -336,30 +336,39 @@ func (n *Node) processFastForwardRequest(rpc net.RPC, cmd *net.FastForwardReques
 // This function is usually called in a go-routine and needs to inform the
 // calling routine (usually the lachesis routine) when it is time to exit the
 // Gossiping state and return.
-func (n *Node) gossip(peerAddr string, parentReturnCh chan struct{}) error {
+func (n *Node) gossip(peersSlice []*peers.Peer, parentReturnCh chan struct{}) error {
 
+	peerAddr := peersSlice[0].NetAddr
 	// pull
-	syncLimit, otherKnownEvents, err := n.pull(peerAddr)
-	if err != nil {
-		return err
-	}
+	var otherKnownEventsArray []map[int]int
+	var err error
+	for _, p := range peersSlice {
+		syncLimit, otherKnownEvents, err := n.pull(p.NetAddr)
+		if err != nil {
+			return err
+		}
 
-	// check and handle syncLimit
-	if syncLimit {
-		n.logger.WithField("from", peerAddr).Debug("SyncLimit")
-		n.setState(CatchingUp)
-		parentReturnCh <- struct{}{}
-		return nil
+		// check and handle syncLimit
+		if syncLimit {
+			n.logger.WithField("from", peerAddr).Debug("SyncLimit")
+			n.setState(CatchingUp)
+			parentReturnCh <- struct{}{}
+			return nil
+		}
+
+		otherKnownEventsArray = append(otherKnownEventsArray, otherKnownEvents)
 	}
 
 	// push
-	err = n.push(peerAddr, otherKnownEvents)
-	if err != nil {
-		return err
+	for i, p := range peersSlice {
+		err = n.push(p.NetAddr, otherKnownEventsArray[i])
+		if err != nil {
+			return err
+		}
 	}
 
 	// update peer selector
-	n.peerSelector.UpdateLast(peerAddr)
+	n.peerSelector.UpdateLastN(peersSlice)
 
 	n.logStats()
 
