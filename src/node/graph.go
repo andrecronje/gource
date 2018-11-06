@@ -9,7 +9,7 @@ import (
 type Infos struct {
 	ParticipantEvents map[string]map[string]poset.Event
 	Rounds            []poset.RoundInfo
-  Blocks            []poset.Block
+	Blocks            []poset.Block
 }
 
 type Graph struct {
@@ -18,18 +18,18 @@ type Graph struct {
 
 func (g *Graph) GetBlocks() []poset.Block {
 	res := []poset.Block{}
- 	blockIdx := 0
+	blockIdx := 0
 	store := g.Node.core.poset.Store
 
- 	for blockIdx <= store.LastBlockIndex() {
+	for blockIdx <= store.LastBlockIndex() {
 		r, err := store.GetBlock(blockIdx)
- 		if err != nil {
+		if err != nil {
 			break
 		}
- 		res = append(res, r)
- 		blockIdx++
+		res = append(res, r)
+		blockIdx++
 	}
- 	return res
+	return res
 }
 
 func (g *Graph) GetParticipantEvents() map[string]map[string]poset.Event {
@@ -108,7 +108,7 @@ func (g *Graph) GetInfos() Infos {
 	return Infos{
 		ParticipantEvents: g.GetParticipantEvents(),
 		Rounds:            g.GetRounds(),
-    Blocks:            g.GetBlocks(),
+		Blocks:            g.GetBlocks(),
 	}
 }
 

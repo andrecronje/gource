@@ -203,11 +203,11 @@ func (c *Core) SignAndInsertSelfEvent(event poset.Event) error {
 func (c *Core) InsertEvent(event poset.Event, setWireInfo bool) error {
 
 	c.logger.WithFields(logrus.Fields{
-		"event":         event,
-		"creator":       event.Creator(),
-		"selfParent":    event.SelfParent(),
-		"index":         event.Index(),
-		"hex":           event.Hex(),
+		"event":      event,
+		"creator":    event.Creator(),
+		"selfParent": event.SelfParent(),
+		"index":      event.Index(),
+		"hex":        event.Hex(),
 	}).Debug("InsertEvent(event poset.Event, setWireInfo bool)")
 
 	if err := c.poset.InsertEvent(event, setWireInfo); err != nil {
@@ -289,11 +289,11 @@ func (c *Core) EventDiff(known map[int]int) (events []poset.Event, err error) {
 				return []poset.Event{}, err
 			}
 			c.logger.WithFields(logrus.Fields{
-				"event":         ev,
-				"creator":       ev.Creator(),
-				"selfParent":    ev.SelfParent(),
-				"index":         ev.Index(),
-				"hex":           ev.Hex(),
+				"event":      ev,
+				"creator":    ev.Creator(),
+				"selfParent": ev.SelfParent(),
+				"index":      ev.Index(),
+				"hex":        ev.Hex(),
 			}).Debugf("Sending Unknown Event")
 			unknown = append(unknown, ev)
 		}
@@ -306,10 +306,10 @@ func (c *Core) EventDiff(known map[int]int) (events []poset.Event, err error) {
 func (c *Core) Sync(unknownEvents [][]poset.WireEvent) error {
 
 	c.logger.WithFields(logrus.Fields{
-		"unknown_events":            len(unknownEvents),
-		"transaction_pool":          len(c.transactionPool),
-		"internal_transaction_pool": len(c.internalTransactionPool),
-		"block_signature_pool":      len(c.blockSignaturePool),
+		"unknown_events":              len(unknownEvents),
+		"transaction_pool":            len(c.transactionPool),
+		"internal_transaction_pool":   len(c.internalTransactionPool),
+		"block_signature_pool":        len(c.blockSignaturePool),
 		"c.poset.PendingLoadedEvents": c.poset.PendingLoadedEvents,
 	}).Debug("Sync(unknownEventBlocks [][]poset.EventBlock)")
 
@@ -318,7 +318,7 @@ func (c *Core) Sync(unknownEvents [][]poset.WireEvent) error {
 	for i, wireEvents := range unknownEvents {
 		for k, wireEvent := range wireEvents {
 			c.logger.WithFields(logrus.Fields{
-				"unknown_events":            wireEvent,
+				"unknown_events": wireEvent,
 			}).Debug("unknownEvents")
 			event, err := c.poset.ReadWireInfo(wireEvent)
 			if err != nil {
@@ -383,14 +383,12 @@ func (c *Core) FastForward(peer string, block poset.Block, frame poset.Frame) er
 	return nil
 }
 
-
 func min(a, b int) int {
-    if a < b {
-        return a
-    }
-    return b
+	if a < b {
+		return a
+	}
+	return b
 }
-
 
 func (c *Core) AddSelfEventBlock(otherHeads []string) error {
 
@@ -428,7 +426,7 @@ func (c *Core) AddSelfEventBlock(otherHeads []string) error {
 
 	// create new event with self head and empty other parent
 	// empty transaction pool in its payload
-	var batch[][]byte
+	var batch [][]byte
 	nTxs := min(len(c.transactionPool), c.maxTransactionsInEvent)
 	batch = c.transactionPool[0:nTxs:nTxs]
 	parents := []string{c.Head}

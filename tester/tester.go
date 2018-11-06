@@ -11,8 +11,8 @@ import (
 	_ "sync"
 
 	"github.com/andrecronje/lachesis/src/peers"
-	"github.com/sirupsen/logrus"
 	"github.com/andrecronje/lachesis/src/proxy"
+	"github.com/sirupsen/logrus"
 )
 
 func PingNodesN(participants []*peers.Peer, p peers.PubKeyPeers, n uint64, delay uint64, logger *logrus.Logger) {

@@ -1005,7 +1005,7 @@ func synchronizeCores(cores []Core, from int, to int, payload [][]byte) error {
 
 	cores[to].AddTransactions(payload)
 
-	return cores[to].Sync(unknownWire)
+	return cores[to].Sync([][]poset.WireEvent{unknownWire})
 }
 
 func syncAndRunConsensus(cores []Core, from int, to int, payload [][]byte) error {

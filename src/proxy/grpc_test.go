@@ -127,9 +127,8 @@ func TestGrpcReConnection(t *testing.T) {
 	const (
 		timeout    = 1 * time.Second
 		errTimeout = "time is over"
-
 	)
-	addr := utils.GetUnusedNetAddr(t);
+	addr := utils.GetUnusedNetAddr(t)
 	logger := common.NewTestLogger(t)
 
 	c, err := NewGrpcLachesisProxy(addr, logger)
@@ -160,7 +159,6 @@ func TestGrpcReConnection(t *testing.T) {
 
 	t.Run("#1 Send tx after connection", checkConnAndStopServer)
 
-
 	s, err = NewGrpcAppProxy(addr, timeout/2, logger)
 	assert.NoError(t, err)
 
@@ -177,9 +175,8 @@ func TestGrpcMaxMsgSize(t *testing.T) {
 		largeSize  = 100 * 1024 * 1024
 		timeout    = 3 * time.Minute
 		errTimeout = "time is over"
-
 	)
-	addr := utils.GetUnusedNetAddr(t);
+	addr := utils.GetUnusedNetAddr(t)
 	logger := common.NewTestLogger(t)
 
 	s, err := NewGrpcAppProxy(addr, timeout, logger)

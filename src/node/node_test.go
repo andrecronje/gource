@@ -270,7 +270,7 @@ func TestAddTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := node0.sync(out.Events); err != nil {
+	if err := node0.sync([][]poset.WireEvent{out.Events}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -567,6 +567,7 @@ func TestCatchUp(t *testing.T) {
 	start := node4.core.poset.FirstConsensusRound
 	checkGossip(nodes, *start, t)
 }
+
 //
 //func TestFastSync(t *testing.T) {
 //	logger := common.NewTestLogger(t)
@@ -712,7 +713,6 @@ func TestShutdown(t *testing.T) {
 //	// Check that both networks did not have completely different consensus events
 //	checkGossip([]*Node{nodes[0], newNodes[0]}, 0, t)
 //}
-
 
 func gossip(nodes []*Node, target int, shutdown bool, timeout time.Duration) error {
 	runNodes(nodes, true)

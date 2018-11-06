@@ -58,7 +58,7 @@ func (p *Peers) AddPeer(peer *Peer) {
 	p.addPeerRaw(peer)
 	p.internalSort()
 	p.Unlock()
- 	p.EmitNewPeer(peer)
+	p.EmitNewPeer(peer)
 }
 
 func (p *Peers) internalSort() {
@@ -139,7 +139,6 @@ func (p *Peers) EmitNewPeer(peer *Peer) {
 		listener(peer)
 	}
 }
-
 
 /* Utilities */
 

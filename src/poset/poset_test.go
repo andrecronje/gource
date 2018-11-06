@@ -152,10 +152,10 @@ func initPosetFull(plays []play, db bool, n int, logger *logrus.Entry) (*Poset, 
 	// Add reference to each participants' root event
 	for i, peer := range participants.ToPeerSlice() {
 		root, err := poset.Store.GetRoot(peer.PubKeyHex)
- 		if err != nil {
+		if err != nil {
 			panic(err)
 		}
- 		index["r"+strconv.Itoa(i)] = root.SelfParent.Hash
+		index["r"+strconv.Itoa(i)] = root.SelfParent.Hash
 	}
 
 	return poset, index, orderedEvents
@@ -448,14 +448,13 @@ func TestInsertEvent(t *testing.T) {
 
 	checkParents := func(e, selfAncestor, ancestor string) bool {
 		ev, err := p.Store.GetEvent(index[e])
- 		if err != nil {
+		if err != nil {
 			t.Fatal(err)
 		}
- 		return ev.SelfParent() == selfAncestor && ev.OtherParent() == ancestor
+		return ev.SelfParent() == selfAncestor && ev.OtherParent(0) == ancestor
 	}
 
 	t.Run("Check Event Coordinates", func(t *testing.T) {
-
 
 		//e0
 		e0, err := p.Store.GetEvent(index["e0"])

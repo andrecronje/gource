@@ -15,7 +15,7 @@ type Config struct {
 	CacheSize        int           `mapstructure:"cache-size"`
 	SyncLimit        int           `mapstructure:"sync-limit"`
 	Logger           *logrus.Logger
-	TestDelay uint64 `mapstructure:"test_delay"`
+	TestDelay        uint64 `mapstructure:"test_delay"`
 }
 
 func NewConfig(heartbeat time.Duration,

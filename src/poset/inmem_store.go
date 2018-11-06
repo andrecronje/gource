@@ -53,11 +53,11 @@ func NewInmemStore(participants *peers.Peers, cacheSize int) *InmemStore {
 		store.rootsByParticipant[peer.PubKeyHex] = root
 		store.rootsBySelfParent = nil
 		store.RootsBySelfParent()
- 		old := store.participantEventsCache
+		old := store.participantEventsCache
 		store.participantEventsCache = NewParticipantEventsCache(cacheSize, participants)
 		store.participantEventsCache.Import(old)
 	})
- 	return store
+	return store
 }
 
 func (s *InmemStore) CacheSize() int {

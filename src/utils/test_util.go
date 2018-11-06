@@ -8,7 +8,7 @@ import (
 )
 
 // source: https://gist.github.com/montanaflynn/b59c058ce2adc18f31d6
-func GetUnusedNetAddr(t testing.TB) (string) {
+func GetUnusedNetAddr(t testing.TB) string {
 	// Create a new server without specifying a port
 	// which will result in an open port being chosen
 	server, err := net.Listen("tcp", ":0")
@@ -29,4 +29,3 @@ func GetUnusedNetAddr(t testing.TB) (string) {
 	port, err := strconv.Atoi(portString)
 	return fmt.Sprintf("127.0.0.1:%d", port)
 }
-

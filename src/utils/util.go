@@ -11,6 +11,3 @@ func UUID() string {
 	}
 	return u.String()
 }
-
-
-
