@@ -33,8 +33,9 @@ type Node struct {
 	trans net.Transport
 	netCh <-chan net.RPC
 
-	proxy    proxy.AppProxy
-	submitCh chan []byte
+	proxy            proxy.AppProxy
+	submitCh         chan []byte
+	submitInternalCh chan poset.InternalTransaction
 
 	commitCh chan poset.Block
 
@@ -64,24 +65,30 @@ func NewNode(conf *Config,
 	commitCh := make(chan poset.Block, 400)
 	core := NewCore(id, key, pmap, store, commitCh, conf.Logger)
 
-	peerSelector := NewRandomPeerSelector(participants, localAddr)
+	pubKey := core.HexID()
+
+	peerSelector := NewRandomPeerSelector(participants, pubKey)
 
 	node := Node{
-		id:           id,
-		conf:         conf,
-		core:         &core,
-		localAddr:    localAddr,
-		logger:       conf.Logger.WithField("this_id", id),
-		peerSelector: peerSelector,
-		trans:        trans,
-		netCh:        trans.Consumer(),
-		proxy:        proxy,
-		submitCh:     proxy.SubmitCh(),
-		commitCh:     commitCh,
-		shutdownCh:   make(chan struct{}),
-		controlTimer: NewRandomControlTimer(),
-		start:        time.Now(),
+		id:               id,
+		conf:             conf,
+		core:             &core,
+		localAddr:        localAddr,
+		logger:           conf.Logger.WithField("this_id", id),
+		peerSelector:     peerSelector,
+		trans:            trans,
+		netCh:            trans.Consumer(),
+		proxy:            proxy,
+		submitCh:         proxy.SubmitCh(),
+		submitInternalCh: proxy.SubmitInternalCh(),
+		commitCh:         commitCh,
+		shutdownCh:       make(chan struct{}),
+		controlTimer:     NewRandomControlTimer(),
+		start:            time.Now(),
 	}
+
+	node.logger.WithField("peers", pmap).Debug("pmap")
+	node.logger.WithField("pubKey", pubKey).Debug("pubKey")
 
 	node.needBoostrap = store.NeedBoostrap()
 
@@ -123,6 +130,9 @@ func (n *Node) Run(gossip bool) {
 	// Process SumbitTx and CommitBlock requests
 	go n.doBackgroundWork()
 
+	// make pause before gossiping test transactions to allow all nodes come up
+	time.Sleep(time.Duration(n.conf.TestDelay) * time.Second)
+
 	// Execute Node State Machine
 	for {
 		// Run different routines depending on node state
@@ -159,6 +169,10 @@ func (n *Node) doBackgroundWork() {
 		case t := <-n.submitCh:
 			n.logger.Debug("Adding Transactions to Transaction Pool")
 			n.addTransaction(t)
+			n.resetTimer()
+		case t := <-n.submitInternalCh:
+			n.logger.Debug("Adding Internal Transaction")
+ 			n.addInternalTransaction(t)
 			n.resetTimer()
 		case block := <-n.commitCh:
 			n.logger.WithFields(logrus.Fields{
@@ -399,6 +413,10 @@ func (n *Node) pull(peerAddr string) (syncLimit bool, otherKnownEvents map[int]i
 	resp, err := n.requestSync(peerAddr, knownEvents)
 	elapsed := time.Since(start)
 	n.logger.WithField("Duration", elapsed.Nanoseconds()).Debug("n.requestSync(peerAddr, knownEvents)")
+	// FIXIT: should we catch io.EOF error here and how we process it?
+//	if err == io.EOF {
+//		return false, nil, nil
+//	}
 	if err != nil {
 		n.logger.WithField("Error", err).Error("n.requestSync(peerAddr, knownEvents)")
 		return false, nil, nil, err
@@ -450,6 +468,7 @@ func (n *Node) push(peerAddr string, knownEvents map[int]int) error {
 
 		// Create and Send EagerSyncRequest
 		start = time.Now()
+		n.logger.WithField("wireEvents", wireEvents).Debug("Sending n.requestEagerSync.wireEvents")
 		resp2, err := n.requestEagerSync(peerAddr, wireEvents)
 		elapsed = time.Since(start)
 		n.logger.WithField("Duration", elapsed.Nanoseconds()).Debug("n.requestEagerSync(peerAddr, wireEvents)")
@@ -521,7 +540,7 @@ func (n *Node) requestSync(target string, known map[int]int) (net.SyncResponse, 
 
 	var out net.SyncResponse
 	err := n.trans.Sync(target, &args, &out)
-
+	//n.logger.WithField("out", out).Debug("requestSync(target string, known map[int]int)")
 	return out, err
 }
 
@@ -532,6 +551,9 @@ func (n *Node) requestEagerSync(target string, events []poset.WireEvent) (net.Ea
 	}
 
 	var out net.EagerSyncResponse
+	n.logger.WithFields(logrus.Fields{
+		"target": target,
+	}).Debug("requestEagerSync(target string, events []poset.WireEvent)")
 	err := n.trans.EagerSync(target, &args, &out)
 
 	return out, err
@@ -621,6 +643,12 @@ func (n *Node) addTransaction(tx []byte) {
 	n.coreLock.Lock()
 	defer n.coreLock.Unlock()
 	n.core.AddTransactions([][]byte{tx})
+}
+
+func (n *Node) addInternalTransaction(tx poset.InternalTransaction) {
+	n.coreLock.Lock()
+ 	defer n.coreLock.Unlock()
+ 	n.core.AddInternalTransactions([]poset.InternalTransaction{tx})
 }
 
 func (n *Node) Shutdown() {
