@@ -188,7 +188,7 @@ func (c *Core) SignAndInsertSelfEvent(event poset.Event) error {
 	if err := event.Sign(c.key); err != nil {
 		return err
 	}
-	return c.InsertEvent(event, true);
+	return c.InsertEvent(event, true)
 }
 
 func (c *Core) InsertEvent(event poset.Event, setWireInfo bool) error {
@@ -278,31 +278,33 @@ func (c *Core) EventDiff(known map[int]int) (events []poset.Event, err error) {
 	return unknown, nil
 }
 
-func (c *Core) Sync(unknownEvents []poset.WireEvent) error {
+func (c *Core) Sync(unknownEvents [][]poset.WireEvent) error {
 
 	c.logger.WithFields(logrus.Fields{
-		"unknown_events":       len(unknownEvents),
-		"transaction_pool":     len(c.transactionPool),
-		"block_signature_pool": len(c.blockSignaturePool),
+		"unknown_events":              len(unknownEvents),
+		"transaction_pool":            len(c.transactionPool),
+		"block_signature_pool":        len(c.blockSignaturePool),
 		"c.poset.PendingLoadedEvents": c.poset.PendingLoadedEvents,
-	}).Debug("Sync(unknownEventBlocks []poset.EventBlock)")
+	}).Debug("Sync(unknownEventBlocks [][]poset.EventBlock)")
 
-	otherHead := ""
+	otherHeads := make([]string, len(unknownEvents), len(unknownEvents))
 	// add unknown events
-	for k, we := range unknownEvents {
-		ev, err := c.poset.ReadWireInfo(we)
-		if err != nil {
-			c.logger.WithField("EventBlock", we).Errorf("c.poset.ReadEventBlockInfo(we)")
-			return err
+	for i, wireEvents := range unknownEvents {
+		for k, wireEvent := range wireEvents {
+			event, err := c.poset.ReadWireInfo(wireEvent)
+			if err != nil {
+				c.logger.WithField("EventBlock", wireEvent).Errorf("c.poset.ReadEventBlockInfo(we)")
+				return err
 
-		}
-		if err := c.InsertEvent(*ev, false); err != nil {
-			return err
-		}
+			}
+			if err := c.InsertEvent(*event, false); err != nil {
+				return err
+			}
 
-		// assume last event corresponds to other-head
-		if k == len(unknownEvents)-1 {
-			otherHead = ev.Hex()
+			// assume last event corresponds to other-head
+			if k == len(wireEvents)-1 {
+				otherHeads[i] = event.Hex()
+			}
 		}
 	}
 
@@ -311,9 +313,9 @@ func (c *Core) Sync(unknownEvents []poset.WireEvent) error {
 	if c.poset.PendingLoadedEvents > 0 ||
 		len(c.transactionPool) > 0 ||
 		len(c.blockSignaturePool) > 0 {
-		return c.AddSelfEventBlock(otherHead)
+		return c.AddSelfEventBlock(otherHeads)
 	}
- 	return nil
+	return nil
 }
 
 func (c *Core) FastForward(peer string, block poset.Block, frame poset.Frame) error {
@@ -351,16 +353,12 @@ func (c *Core) FastForward(peer string, block poset.Block, frame poset.Frame) er
 	return nil
 }
 
-func (c *Core) AddSelfEventBlock(otherHead string) error {
+func (c *Core) AddSelfEventBlock(otherHeads []string) error {
 
 	// Get flag tables from parents
 	parentEvent, errSelf := c.poset.Store.GetEvent(c.Head)
 	if errSelf != nil {
 		c.logger.Warnf("failed to get parent: %s", errSelf)
-	}
-	otherParentEvent, errOther := c.poset.Store.GetEvent(otherHead)
-	if errOther != nil {
-		c.logger.Warnf("failed to get  other parent: %s", errOther)
 	}
 
 	var (
@@ -377,17 +375,31 @@ func (c *Core) AddSelfEventBlock(otherHead string) error {
 		}
 	}
 
-	if errOther == nil {
+	for _, otherHead := range otherHeads {
+		otherParentEvent, errOther := c.poset.Store.GetEvent(otherHead)
+		if errOther != nil {
+			c.logger.Warnf("failed to get  other parent: %s", errOther)
+		}
+
 		flagTable, err = otherParentEvent.MargeFlagTable(flagTable)
 		if err != nil {
 			return fmt.Errorf("failed to marge flag tables: %s", err)
 		}
+
 	}
 
 	// create new event with self head and empty other parent
 	// empty transaction pool in its payload
-	newHead := poset.NewEvent(c.transactionPool, c.blockSignaturePool,
-		[]string{c.Head, otherHead}, c.PubKey(), c.Seq+1, flagTable)
+	parents := []string{c.Head}
+	parents = append(parents, otherHeads...)
+	newHead := poset.NewEvent(
+		c.transactionPool,
+		c.blockSignaturePool,
+		parents,
+		c.PubKey(),
+		c.Seq+1,
+		flagTable,
+	)
 
 	if err := c.SignAndInsertSelfEvent(newHead); err != nil {
 		return fmt.Errorf("newHead := poset.NewEventBlock: %s", err)
@@ -466,8 +478,8 @@ func (c *Core) RunConsensus() error {
 	}
 
 	c.logger.WithFields(logrus.Fields{
-		"transaction_pool":     len(c.transactionPool),
-		"block_signature_pool": len(c.blockSignaturePool),
+		"transaction_pool":            len(c.transactionPool),
+		"block_signature_pool":        len(c.blockSignaturePool),
 		"c.poset.PendingLoadedEvents": c.poset.PendingLoadedEvents,
 	}).Debug("c.RunConsensus()")
 

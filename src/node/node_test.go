@@ -749,13 +749,17 @@ func checkGossip(nodes []*Node, fromBlock int, t *testing.T) {
 		for k := 1; k < len(nodes); k++ {
 			oBlock := nodeBlocks[k][i]
 			if !reflect.DeepEqual(block.Body, oBlock.Body) {
-				t.Fatalf("checkGossip: Difference in Block %d. ###### nodes[0]: %v ###### nodes[%d]: %v", block.Index(), block.Body, k, oBlock.Body)
+				t.Fatalf("checkGossip: Difference in Block %d. ###### nodes[0]: %v ###### nodes[%d]: %v",
+					block.Index(),
+					block.Body,
+					k,
+					oBlock.Body)
 			}
 		}
 	}
 }
 
-func makeRandomTransactions(nodes []*Node, quit chan struct{}) {
+func makeRandomTransactions(nodes []*Node, quit <-chan struct{}) {
 	go func() {
 		seq := make(map[int]int)
 		for {
