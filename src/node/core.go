@@ -416,11 +416,11 @@ func (c *Core) AddSelfEventBlock(otherHeads []string) error {
 		otherParentEvent, errOther := c.poset.Store.GetEvent(otherHead)
 		if errOther != nil {
 			c.logger.Warnf("failed to get  other parent: %s", errOther)
-		}
-
-		flagTable, err = otherParentEvent.MargeFlagTable(flagTable)
-		if err != nil {
-			return fmt.Errorf("failed to marge flag tables: %s", err)
+		} else {
+			flagTable, err = otherParentEvent.MargeFlagTable(flagTable)
+			if err != nil {
+				return fmt.Errorf("failed to marge flag tables: %s", err)
+			}
 		}
 	}
 
@@ -450,7 +450,7 @@ func (c *Core) AddSelfEventBlock(otherHeads []string) error {
 		"block_signatures":      len(c.blockSignaturePool),
 	}).Debug("newHead := poset.NewEventBlock")
 
-	c.transactionPool = c.transactionPool[nTxs:] //[][]byte{}
+	c.transactionPool = c.transactionPool[nTxs:] // [][]byte{}
 	c.internalTransactionPool = []poset.InternalTransaction{}
 	// retain c.blockSignaturePool until c.transactionPool is empty
 	// FIXIT: is there any better strategy?
