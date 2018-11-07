@@ -1,10 +1,10 @@
 package poset
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
-	"encoding/json"
 	"github.com/andrecronje/lachesis/src/crypto"
 )
 
@@ -139,13 +139,13 @@ func TestWireEvent(t *testing.T) {
 }
 
 func TestIsLoaded(t *testing.T) {
-	//nil payload
+	// nil payload
 	event := NewEvent(nil, nil, nil, []string{"p1", "p2"}, []byte("creator"), 1, nil)
 	if event.IsLoaded() {
 		t.Fatalf("IsLoaded() should return false for nil Body.Transactions and Body.BlockSignatures")
 	}
 
-	//empty payload
+	// empty payload
 	event.Body.Transactions = [][]byte{}
 	if event.IsLoaded() {
 		t.Fatalf("IsLoaded() should return false for empty Body.Transactions")
@@ -156,19 +156,19 @@ func TestIsLoaded(t *testing.T) {
 		t.Fatalf("IsLoaded() should return false for empty Body.BlockSignatures")
 	}
 
-	//initial event
+	// initial event
 	event.Body.Index = 0
 	if !event.IsLoaded() {
 		t.Fatalf("IsLoaded() should return true for initial event")
 	}
 
-	//non-empty tx payload
+	// non-empty tx payload
 	event.Body.Transactions = [][]byte{[]byte("abc")}
 	if !event.IsLoaded() {
 		t.Fatalf("IsLoaded() should return true for non-empty transaction payload")
 	}
 
-	//non-empy signature payload
+	// non-empy signature payload
 	event.Body.Transactions = nil
 	event.Body.BlockSignatures = []BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}}
 	if !event.IsLoaded() {
@@ -183,7 +183,7 @@ func TestEventFlagTable(t *testing.T) {
 		"z": 2,
 	}
 
-	event := NewEvent(nil, nil, []string{"p1", "p2"}, []byte("creator"), 1, exp)
+	event := NewEvent(nil, nil, nil, []string{"p1", "p2"}, []byte("creator"), 1, exp)
 	if event.IsLoaded() {
 		t.Fatalf("IsLoaded() should return false for nil Body.Transactions and Body.BlockSignatures")
 	}
