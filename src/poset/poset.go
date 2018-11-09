@@ -15,6 +15,12 @@ import (
 	"github.com/andrecronje/lachesis/src/peers"
 )
 
+// Core is an interface for interacting with a core.
+type Core interface {
+	Head() string
+	HexID() string
+}
+
 // Poset is a DAG of Events. It also contains methods to extract a consensus
 // order of Events and map them onto a blockchain.
 type Poset struct {
@@ -22,17 +28,18 @@ type Poset struct {
 	Store                   Store            // store of Events, Rounds, and Blocks
 	UndeterminedEvents      []string         // [index] => hash . FIFO queue of Events whose consensus order is not yet determined
 	PendingRounds           []*pendingRound  // FIFO queue of Rounds which have not attained consensus yet
-	LastConsensusRound      *int             // index of last consensus round
-	FirstConsensusRound     *int             // index of first consensus round (only used in tests)
-	AnchorBlock             *int             // index of last block with enough signatures
+	LastConsensusRound      *int64           // index of last consensus round
+	FirstConsensusRound     *int64           // index of first consensus round (only used in tests)
+	AnchorBlock             *int64           // index of last block with enough signatures
 	LastCommitedRoundEvents int              // number of events in round before LastConsensusRound
 	SigPool                 []BlockSignature // Pool of Block signatures that need to be processed
 	ConsensusTransactions   uint64           // number of consensus transactions
 	PendingLoadedEvents     int              // number of loaded events that are not yet committed
 	commitCh                chan Block       // channel for committing Blocks
-	topologicalIndex        int              // counter used to order events in topological order (only local)
+	topologicalIndex        int64            // counter used to order events in topological order (only local)
 	superMajority           int
 	trustCount              int
+	core                    Core
 
 	ancestorCache     *common.LRU
 	selfAncestorCache *common.LRU
@@ -77,6 +84,11 @@ func NewPoset(participants *peers.Peers, store Store, commitCh chan Block, logge
 	})
 
 	return &poset
+}
+
+// SetCore sets a core for poset.
+func (p *Poset) SetCore(core Core) {
+	p.core = core
 }
 
 /*******************************************************************************
@@ -180,7 +192,7 @@ func (p *Poset) selfAncestor2(x, y string) (bool, error) {
 	ex, err := p.Store.GetEvent(x)
 	if err != nil {
 		roots, err := p.Store.RootsBySelfParent()
-		if err != nil {
+ 		if err != nil {
 			return false, err
 		}
 		if root, ok := roots[x]; ok {
@@ -292,9 +304,9 @@ func (p *Poset) MapSentinels(x, y string, sentinels map[string]bool) error {
 	return p.MapSentinels(ex.SelfParent(), y, sentinels)
 }
 
-func (p *Poset) round(x string) (int, error) {
+func (p *Poset) round(x string) (int64, error) {
 	if c, ok := p.roundCache.Get(x); ok {
-		return c.(int), nil
+		return c.(int64), nil
 	}
 	r, err := p.round2(x)
 	if err != nil {
@@ -304,7 +316,7 @@ func (p *Poset) round(x string) (int, error) {
 	return r, nil
 }
 
-func (p *Poset) round2(x string) (int, error) {
+func (p *Poset) round2(x string) (int64, error) {
 
 	/*
 		x is the Root
@@ -341,12 +353,14 @@ func (p *Poset) round2(x string) (int, error) {
 		The Event's parents are "normal" Events.
 		Use the whitepaper formula: parentRound + roundInc
 	*/
-	parentRound, err := p.round(ex.SelfParent())
+	spRound, err := p.round(ex.SelfParent())
 	if err != nil {
 		return math.MinInt32, err
 	}
+	var parentRound = spRound
+	var opRound int64
+
 	if ex.OtherParent(0) != "" {
-		var opRound int
 		// XXX
 		if other, ok := root.Others[ex.Hex()]; ok && other.Hash == ex.OtherParent(0) {
 			opRound = root.NextRound
@@ -358,28 +372,80 @@ func (p *Poset) round2(x string) (int, error) {
 		}
 
 		if opRound > parentRound {
+			// if in a flag table there are witnesses of the current round, then
+			// current round is other parent round.
+			ws := p.Store.RoundWitnesses(opRound)
+			ft, _ := ex.GetFlagTable()
+			for k := range ft {
+				for _, w := range ws {
+					if w == k && w != ex.Hex() {
+						see, err := p.see(ex.Hex(), w)
+						if err != nil {
+							return math.MinInt32, err
+						}
+
+						if see {
+							return opRound, nil
+						}
+					}
+				}
+			}
 			parentRound = opRound
 		}
 	}
 
-	c := 0
-	for _, w := range p.Store.RoundWitnesses(parentRound) {
-		ss, err := p.stronglySee(x, w)
-		if err != nil {
-			return math.MinInt32, err
+	ws := p.Store.RoundWitnesses(parentRound)
+
+	isSee := func(poset *Poset, root string, witnesses []string) bool {
+		for _, w := range ws {
+			if w == root && w != ex.Hex() {
+				see, err := poset.see(ex.Hex(), w)
+				if err != nil {
+					return false
+				}
+				if see {
+					return true
+				}
+			}
 		}
-		if ss {
-			c++
+		return false
+	}
+
+	// check wp
+	if len(ex.WitnessProof) >= p.superMajority {
+		count := 0
+
+		for _, root := range ex.WitnessProof {
+			if isSee(p, root, ws) {
+				count++
+			}
+		}
+
+		if count >= p.superMajority {
+			return parentRound + 1, err
 		}
 	}
-	if c >= p.superMajority {
-		parentRound++
+
+	// check ft
+	ft, _ := ex.GetFlagTable()
+	if len(ft) >= p.superMajority {
+		count := 0
+
+		for root := range ft {
+			if isSee(p, root, ws) {
+				count++
+			}
+		}
+
+		if count >= p.superMajority {
+			return parentRound + 1, err
+		}
 	}
 
 	return parentRound, nil
 }
 
-// true if x is a witness (first event of a round for the owner)
+// witness if is true then x is a witness (first event of a round for the owner)
 func (p *Poset) witness(x string) (bool, error) {
 	ex, err := p.Store.GetEvent(x)
 	if err != nil {
@@ -397,14 +463,14 @@ func (p *Poset) witness(x string) (bool, error) {
 	return xRound > spRound, nil
 }
 
-func (p *Poset) roundReceived(x string) (int, error) {
+func (p *Poset) roundReceived(x string) (int64, error) {
 
 	ex, err := p.Store.GetEvent(x)
 	if err != nil {
 		return -1, err
 	}
 
-	res := -1
+	res := int64(-1)
 	if ex.roundReceived != nil {
 		res = *ex.roundReceived
 	}
@@ -412,9 +478,9 @@ func (p *Poset) roundReceived(x string) (int, error) {
 	return res, nil
 }
 
-func (p *Poset) lamportTimestamp(x string) (int, error) {
+func (p *Poset) lamportTimestamp(x string) (int64, error) {
 	if c, ok := p.timestampCache.Get(x); ok {
-		return c.(int), nil
+		return c.(int64), nil
 	}
 	r, err := p.lamportTimestamp2(x)
 	if err != nil {
@@ -424,7 +490,7 @@ func (p *Poset) lamportTimestamp(x string) (int, error) {
 	return r, nil
 }
 
-func (p *Poset) lamportTimestamp2(x string) (int, error) {
+func (p *Poset) lamportTimestamp2(x string) (int64, error) {
 	/*
 		x is the Root
 		User Root.SelfParent.LamportTimestamp
@@ -445,7 +511,7 @@ func (p *Poset) lamportTimestamp2(x string) (int, error) {
 		return math.MinInt32, err
 	}
 
-	plt := math.MinInt32
+	plt := int64(math.MinInt64)
 	// If it is the creator's first Event, use the corresponding Root
 	if ex.SelfParent() == root.SelfParent.Hash {
 		plt = root.SelfParent.LamportTimestamp
@@ -458,7 +524,7 @@ func (p *Poset) lamportTimestamp2(x string) (int, error) {
 	}
 
 	if ex.OtherParent(0) != "" {
-		opLT := math.MinInt32
+		opLT := int64(math.MinInt64)
 		if _, err := p.Store.GetEvent(ex.OtherParent(0)); err == nil {
 			// if we know the other-parent, fetch its Round directly
 			t, err := p.lamportTimestamp(ex.OtherParent(0))
@@ -481,7 +547,7 @@ func (p *Poset) lamportTimestamp2(x string) (int, error) {
 }
 
 // lamport(y) - lamport(x)
-func (p *Poset) lamportTimestampDiff(x, y string) (int, error) {
+func (p *Poset) lamportTimestampDiff(x, y string) (int64, error) {
 	xlt, err := p.lamportTimestamp(x)
 	if err != nil {
 		return 0, err
@@ -493,8 +559,8 @@ func (p *Poset) lamportTimestampDiff(x, y string) (int, error) {
 	return ylt - xlt, nil
 }
 
-//round(x) - round(y)
-func (p *Poset) roundDiff(x, y string) (int, error) {
+// round(x) - round(y)
+func (p *Poset) roundDiff(x, y string) (int64, error) {
 
 	xRound, err := p.round(x)
 	if err != nil {
@@ -530,7 +596,7 @@ func (p *Poset) checkSelfParent(event Event) error {
 	selfParentLegit := selfParent == creatorLastKnown
 
 	if !selfParentLegit {
-		return fmt.Errorf("Self-parent not last known event by creator")
+		return fmt.Errorf("self-parent not last known event by creator")
 	}
 
 	return nil
@@ -547,7 +613,7 @@ func (p *Poset) checkOtherParents(event Event) error {
 				// it might still be in the Root
 				root, err := p.Store.GetRoot(event.Creator())
 				if err != nil {
-					continue
+					return err
 				}
 				other, ok := root.Others[event.Hex()]
 				if ok && other.Hash == otherParent {
@@ -669,7 +735,7 @@ func (p *Poset) SetWireInfoAndSign(event *Event, privKey *ecdsa.PrivateKey) erro
 }
 
 func (p *Poset) setWireInfo(event *Event) error {
-	selfParentIndex := -1
+	selfParentIndex := int64(-1)
 
 	// could be the first Event inserted for this creator. In this case, use Root
 	if lf, isRoot, _ := p.Store.LastEventFrom(event.Creator()); isRoot && lf == event.SelfParent() {
@@ -687,11 +753,11 @@ func (p *Poset) setWireInfo(event *Event) error {
 	}
 
 	otherParents := event.OtherParents()
-	otherParentCreatorIDs := make([]int, len(otherParents))
-	otherParentIndexes := make([]int, len(otherParents))
+	otherParentCreatorIDs := make([]int64, len(otherParents))
+	otherParentIndexes := make([]int64, len(otherParents))
 	for i := range otherParents {
-		otherParentCreatorIDs[i] = -1
-		otherParentIndexes[i] = -1
+		otherParentCreatorIDs[i] = int64(-1)
+		otherParentIndexes[i] = int64(-1)
 	}
 
 	for i, otherParentHash := range otherParents {
@@ -724,7 +790,7 @@ func (p *Poset) setWireInfo(event *Event) error {
 	return nil
 }
 
-func (p *Poset) updatePendingRounds(decidedRounds map[int]int) {
+func (p *Poset) updatePendingRounds(decidedRounds map[int64]int64) {
 	for _, ur := range p.PendingRounds {
 		if _, ok := decidedRounds[ur.Index]; ok {
 			ur.Decided = true
@@ -733,7 +799,7 @@ func (p *Poset) updatePendingRounds(decidedRounds map[int]int) {
 }
 
 // Remove processed Signatures from SigPool
-func (p *Poset) removeProcessedSignatures(processedSignatures map[int]bool) {
+func (p *Poset) removeProcessedSignatures(processedSignatures map[int64]bool) {
 	var newSigPool []BlockSignature
 	for _, bs := range p.SigPool {
 		if _, ok := processedSignatures[bs.Index]; !ok {
@@ -764,7 +830,7 @@ func (p *Poset) InsertEvent(event Event, setWireInfo bool) error {
 			"hex":        event.Hex(),
 		}).Debugf("Invalid Event signature")
 
-		return fmt.Errorf("Invalid Event signature")
+		return fmt.Errorf("invalid Event signature")
 	}
 
 	if err := p.checkSelfParent(event); err != nil {
@@ -863,6 +929,36 @@ func (p *Poset) DivideRounds() error {
 			if err != nil {
 				return err
 			}
+
+			if witness {
+				// if event is self head
+				if p.core != nil && ev.Hex() == p.core.Head() &&
+					ev.Creator() == p.core.HexID() {
+
+					replaceFlagTable := func(event *Event, round int64) {
+						ft := make(map[string]int)
+						ws := p.Store.RoundWitnesses(round)
+						for _, v := range ws {
+							ft[v] = 1
+						}
+						event.ReplaceFlagTable(ft)
+					}
+
+					// special case
+					if ev.Round() == 0 {
+						replaceFlagTable(&ev, 0)
+						root, err := p.Store.GetRoot(ev.Creator())
+						if err != nil {
+							return err
+						}
+						ev.WitnessProof = []string{root.SelfParent.Hash}
+					} else {
+						replaceFlagTable(&ev, ev.Round())
+						roots := p.Store.RoundWitnesses(ev.Round() - 1)
+						ev.WitnessProof = roots
+					}
+				}
+			}
 		}
 
 		/*
@@ -899,7 +995,7 @@ func (p *Poset) DecideFame() error {
 		votes[x][y] = vote
 	}
 
-	decidedRounds := map[int]int{} // [round number] => index in p.PendingRounds
+	decidedRounds := map[int64]int64{} // [round number] => index in p.PendingRounds
 
 	for pos, r := range p.PendingRounds {
 		roundIndex := r.Index
@@ -976,7 +1072,7 @@ func (p *Poset) DecideFame() error {
 		}
 
 		if roundInfo.WitnessesDecided() {
-			decidedRounds[roundIndex] = pos
+			decidedRounds[roundIndex] = int64(pos)
 		}
 
 	}
@@ -1105,7 +1201,7 @@ func (p *Poset) ProcessDecidedRounds() error {
 
 		frame, err := p.GetFrame(r.Index)
 		if err != nil {
-			return fmt.Errorf("Getting Frame %d: %v", r.Index, err)
+			return fmt.Errorf("getting Frame %d: %v", r.Index, err)
 		}
 
 		round, err := p.Store.GetRound(r.Index)
@@ -1163,7 +1259,7 @@ func (p *Poset) ProcessDecidedRounds() error {
 }
 
 // GetFrame computes the Frame corresponding to a RoundReceived.
-func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
+func (p *Poset) GetFrame(roundReceived int64) (Frame, error) {
 
 	// Try to get it from the Store first
 	frame, err := p.Store.GetFrame(roundReceived)
@@ -1275,7 +1371,7 @@ func (p *Poset) GetFrame(roundReceived int) (Frame, error) {
 // a known Block. If a Signature is found to be valid for a known Block, it is
 // appended to the block and removed from the SignaturePool
 func (p *Poset) ProcessSigPool() error {
-	processedSignatures := map[int]bool{} // index in SigPool => Processed?
+	processedSignatures := map[int64]bool{} // index in SigPool => Processed?
 	defer p.removeProcessedSignatures(processedSignatures)
 
 	for i, bs := range p.SigPool {
@@ -1337,7 +1433,7 @@ func (p *Poset) ProcessSigPool() error {
 			}
 		}
 
-		processedSignatures[i] = true
+		processedSignatures[int64(i)] = true
 	}
 
 	return nil
@@ -1348,7 +1444,7 @@ func (p *Poset) ProcessSigPool() error {
 func (p *Poset) GetAnchorBlockWithFrame() (Block, Frame, error) {
 
 	if p.AnchorBlock == nil {
-		return Block{}, Frame{}, fmt.Errorf("No Anchor Block")
+		return Block{}, Frame{}, fmt.Errorf("no Anchor Block")
 	}
 
 	block, err := p.Store.GetBlock(*p.AnchorBlock)
@@ -1462,7 +1558,7 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	creator := p.Participants.ById[wevent.Body.CreatorID]
 	// FIXIT: creator can be nil when wevent.Body.CreatorID == 0
 	if creator == nil {
-		return nil, fmt.Errorf("Unknown wevent.Body.CreatorID=%v", wevent.Body.CreatorID)
+		return nil, fmt.Errorf("unknown wevent.Body.CreatorID=%v", wevent.Body.CreatorID)
 	}
 	creatorBytes, err := hex.DecodeString(creator.PubKeyHex[2:])
 	if err != nil {
@@ -1534,9 +1630,10 @@ func (p *Poset) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	}
 
 	event := &Event{
-		Body:      body,
-		Signature: wevent.Signature,
-		FlagTable: wevent.FlagTable,
+		Body:         body,
+		Signature:    wevent.Signature,
+		FlagTable:    wevent.FlagTable,
+		WitnessProof: wevent.WitnessProof,
 	}
 
 	p.logger.WithFields(logrus.Fields{
@@ -1558,7 +1655,7 @@ func (p *Poset) CheckBlock(block Block) error {
 		}
 	}
 	if validSignatures <= p.trustCount {
-		return fmt.Errorf("Not enough valid signatures: got %d, need %d", validSignatures, p.trustCount+1)
+		return fmt.Errorf("not enough valid signatures: got %d, need %d", validSignatures, p.trustCount+1)
 	}
 
 	p.logger.WithField("valid_signatures", validSignatures).Debug("CheckBlock")
@@ -1569,21 +1666,21 @@ func (p *Poset) CheckBlock(block Block) error {
 Setters
 *******************************************************************************/
 
-func (p *Poset) setLastConsensusRound(i int) {
+func (p *Poset) setLastConsensusRound(i int64) {
 	if p.LastConsensusRound == nil {
-		p.LastConsensusRound = new(int)
+		p.LastConsensusRound = new(int64)
 	}
 	*p.LastConsensusRound = i
 
 	if p.FirstConsensusRound == nil {
-		p.FirstConsensusRound = new(int)
+		p.FirstConsensusRound = new(int64)
 		*p.FirstConsensusRound = i
 	}
 }
 
-func (p *Poset) setAnchorBlock(i int) {
+func (p *Poset) setAnchorBlock(i int64) {
 	if p.AnchorBlock == nil {
-		p.AnchorBlock = new(int)
+		p.AnchorBlock = new(int64)
 	}
 	*p.AnchorBlock = i
 }
