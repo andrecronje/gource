@@ -544,7 +544,7 @@ func TestInsertEvent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return ev.SelfParent() == selfAncestor && ev.OtherParent() == ancestor
+		return ev.SelfParent() == selfAncestor && ev.OtherParent(0) == ancestor
 	}
 
 	t.Run("Check Event Coordinates", func(t *testing.T) {

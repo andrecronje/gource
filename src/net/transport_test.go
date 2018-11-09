@@ -56,8 +56,8 @@ func TestTransport_Sync(t *testing.T) {
 					Body: poset.WireBody{
 						Transactions:          [][]byte(nil),
 						SelfParentIndex:       1,
-						OtherParentCreatorIDs: []int{10},
-						OtherParentIndexes:    []int{0},
+						OtherParentCreatorIDs: []int64{10},
+						OtherParentIndexes:    []int64{0},
 						CreatorID:             9,
 					},
 				},
@@ -118,8 +118,8 @@ func TestTransport_EagerSync(t *testing.T) {
 					Body: poset.WireBody{
 						Transactions:          [][]byte(nil),
 						SelfParentIndex:       1,
-						OtherParentCreatorIDs: []int{10},
-						OtherParentIndexes:    []int{0},
+						OtherParentCreatorIDs: []int64{10},
+						OtherParentIndexes:    []int64{0},
 						CreatorID:             9,
 					},
 				},
