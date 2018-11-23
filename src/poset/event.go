@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/andrecronje/lachesis/src/crypto"
-	"github.com/andrecronje/lachesis/src/peers"
+	"github.com/Fantom-foundation/go-lachesis/src/crypto"
+	"github.com/Fantom-foundation/go-lachesis/src/peers"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -400,6 +400,10 @@ func (e *Event) MergeFlagTable(
 		}
 	}
 	return src.Body, err
+}
+
+func (e *Event) CreatorID() int64 {
+	return e.creatorID
 }
 
 func rootSelfParent(participantID int64) string {

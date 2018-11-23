@@ -11,13 +11,13 @@ vendor:
 # install compiles and places the binary in GOPATH/bin
 install:
 	go install --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/andrecronje/lachesis/src/version.GitCommit=`git rev-parse HEAD`" \
+		--ldflags "-X github.com/Fantom-foundation/go-lachesis/src/version.GitCommit=`git rev-parse HEAD`" \
 		./cmd/lachesis
 
 # build compiles and places the binary in /build
 build:
 	CGO_ENABLED=0 go build \
-		--ldflags "-X github.com/andrecronje/lachesis/src/version.GitCommit=`git rev-parse HEAD`" \
+		--ldflags "-X github.com/Fantom-foundation/go-lachesis/src/version.GitCommit=`git rev-parse HEAD`" \
 		-o build/lachesis ./cmd/lachesis/main.go
 
 # dist builds binaries for all platforms and packages them for distribution
@@ -28,9 +28,9 @@ test:
 	glide novendor | grep -v -e "^\.$$" | xargs go test -timeout 45s
 
 # clean up and generate protobuf files
-proto:
-	make clean
-	make build
+proto: clean
+
+clean:
 
 .PHONY: $(TARGETS) $(SUBDIR_TARGETS) vendor install dist test
 

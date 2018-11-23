@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andrecronje/lachesis/src/peers"
+	"github.com/Fantom-foundation/go-lachesis/src/peers"
 )
 
 // PeerSelector provides an interface for the lachesis node to 

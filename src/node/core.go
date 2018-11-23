@@ -9,10 +9,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/andrecronje/lachesis/src/crypto"
-	"github.com/andrecronje/lachesis/src/log"
-	"github.com/andrecronje/lachesis/src/peers"
-	"github.com/andrecronje/lachesis/src/poset"
+	"github.com/Fantom-foundation/go-lachesis/src/crypto"
+	"github.com/Fantom-foundation/go-lachesis/src/log"
+	"github.com/Fantom-foundation/go-lachesis/src/peers"
+	"github.com/Fantom-foundation/go-lachesis/src/poset"
 )
 
 type Core struct {
@@ -301,7 +301,7 @@ func (c *Core) EventDiff(known map[int64]int64) (events []poset.Event, err error
 			unknown = append(unknown, ev)
 		}
 	}
-	sort.Sort(poset.ByTopologicalOrder(unknown))
+	sort.Stable(poset.ByTopologicalOrder(unknown))
 
 	return unknown, nil
 }
@@ -316,6 +316,7 @@ func (c *Core) Sync(unknownEvents [][]poset.WireEvent) error {
 		"c.poset.PendingLoadedEvents": c.poset.PendingLoadedEvents,
 	}).Debug("Sync(unknownEventBlocks [][]poset.EventBlock)")
 
+	myKnownEvents := c.KnownEvents()
 	otherHeads := make([]string, len(unknownEvents), len(unknownEvents))
 	// add unknown events
 	for i, wireEvents := range unknownEvents {
@@ -329,9 +330,11 @@ func (c *Core) Sync(unknownEvents [][]poset.WireEvent) error {
 				return err
 
 			}
+		if event.Index() > myKnownEvents[event.CreatorID()] {
 			if err := c.InsertEvent(*event, false); err != nil {
 				return err
 			}
+		}
 
 			// assume last event corresponds to other-head
 			if k == len(wireEvents)-1 {
