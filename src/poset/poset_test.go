@@ -943,20 +943,28 @@ func TestCreateRoot(t *testing.T) {
 		e02: {
 			NextRound:  1,
 			SelfParent: &RootEvent{Hash: index[s00], CreatorID: participants[0].ID, Index: 1, LamportTimestamp: 1, Round: 0},
-			Others: map[string]*RootEvent{
-				index[e02]: {Hash: index[e21], CreatorID: participants[2].ID, Index: 2, LamportTimestamp: 2, Round: 1},
+			Others: map[string]*RootEvents{
+				index[e02]: {
+					Value: []*RootEvent{
+						{Hash: index[e21], CreatorID: participants[2].ID, Index: 2, LamportTimestamp: 2, Round: 1},
+					},
+				},
 			},
 		},
 		s10: {
 			NextRound:  0,
 			SelfParent: &RootEvent{Hash: index[e10], CreatorID: participants[1].ID, Index: 1, LamportTimestamp: 1, Round: 0},
-			Others:     map[string]*RootEvent{},
+			Others:     map[string]*RootEvents{},
 		},
 		f1: {
 			NextRound:  1,
 			SelfParent: &RootEvent{Hash: index[s10], CreatorID: participants[1].ID, Index: 2, LamportTimestamp: 2, Round: 0},
-			Others: map[string]*RootEvent{
-				index[f1]: {Hash: index[e02], CreatorID: participants[0].ID, Index: 2, LamportTimestamp: 3, Round: 1},
+			Others: map[string]*RootEvents{
+				index[f1]: {
+					Value: []*RootEvent{
+						{Hash: index[e02], CreatorID: participants[0].ID, Index: 2, LamportTimestamp: 3, Round: 1},
+					},
+				},
 			},
 		},
 	}
@@ -1030,8 +1038,12 @@ func TestCreateRootBis(t *testing.T) {
 		e12: {
 			NextRound:  0,
 			SelfParent: &root,
-			Others: map[string]*RootEvent{
-				index[e12]: &RootEvent{Hash: index[e2], CreatorID: participants[2].ID, Index: 0, LamportTimestamp: 0, Round: 0},
+			Others: map[string]*RootEvents{
+				index[e12]: {
+					Value: []*RootEvent{
+						{Hash: index[e2], CreatorID: participants[2].ID, Index: 0, LamportTimestamp: 0, Round: 0},
+					},
+				},
 			},
 		},
 	}
@@ -1717,7 +1729,7 @@ func TestGetFrame(t *testing.T) {
 		}
 	}
 
-	compareOtherParents := func(t *testing.T, x, exp map[string]*RootEvent) {
+	compareOtherParents := func(t *testing.T, x, exp map[string]*RootEvents) {
 		if len(x) != len(exp) {
 			t.Fatalf("expected number of other parents: %d, got: %d",
 				len(exp), len(x))
@@ -1728,7 +1740,10 @@ func TestGetFrame(t *testing.T) {
 			if !ok {
 				t.Fatalf("root %v not exists", v)
 			}
-			compareRootEvents(t, root, v)
+			for i, r := range v.Value {
+				compareRootEvents(t, root.Value[i], r)
+			}
+
 		}
 	}
 
@@ -1800,13 +1815,17 @@ func TestGetFrame(t *testing.T) {
 				LamportTimestamp: 0,
 				Round:            0,
 			},
-			Others: map[string]*RootEvent{
+			Others: map[string]*RootEvents{
 				index[f0]: {
-					Hash:             index[f2b],
-					CreatorID:        participants[2].ID,
-					Index:            2,
-					LamportTimestamp: 3,
-					Round:            1,
+					Value: []*RootEvent{
+						{
+							Hash:             index[f2b],
+							CreatorID:        participants[2].ID,
+							Index:            2,
+							LamportTimestamp: 3,
+							Round:            1,
+						},
+					},
 				},
 			},
 		}
@@ -1819,13 +1838,17 @@ func TestGetFrame(t *testing.T) {
 				LamportTimestamp: 1,
 				Round:            0,
 			},
-			Others: map[string]*RootEvent{
+			Others: map[string]*RootEvents{
 				index[f1]: {
-					Hash:             index[f0],
-					CreatorID:        participants[0].ID,
-					Index:            1,
-					LamportTimestamp: 4,
-					Round:            1,
+					Value: []*RootEvent {
+						{
+							Hash:             index[f0],
+							CreatorID:        participants[0].ID,
+							Index:            1,
+							LamportTimestamp: 4,
+							Round:            1,
+						},
+					},
 				},
 			},
 		}
@@ -1838,13 +1861,17 @@ func TestGetFrame(t *testing.T) {
 				LamportTimestamp: 0,
 				Round:            0,
 			},
-			Others: map[string]*RootEvent{
+			Others: map[string]*RootEvents{
 				index[f2]: {
-					Hash:             index[e10],
-					CreatorID:        participants[1].ID,
-					Index:            1,
-					LamportTimestamp: 1,
-					Round:            0,
+					Value: []*RootEvent{
+						{
+							Hash:             index[e10],
+							CreatorID:        participants[1].ID,
+							Index:            1,
+							LamportTimestamp: 1,
+							Round:            0,
+						},
+					},
 				},
 			},
 		}
