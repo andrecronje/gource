@@ -837,9 +837,10 @@ func (p *Poset) setWireInfo(event *Event) error {
 			if err != nil {
 				return err
 			}
-
-			if otherRoots, ok := root.Others[event.Hex()]; ok {
-				found := false
+			ok := false
+			found := false
+			var otherRoots *RootEvents
+			if otherRoots, ok = root.Others[event.Hex()]; ok {
 				for _, rootEvent := range otherRoots.Value {
 					if rootEvent.Hash == otherParentHash {
 						otherParentCreatorIDs[i] = rootEvent.CreatorID
@@ -848,14 +849,14 @@ func (p *Poset) setWireInfo(event *Event) error {
 						break
 					}
 				}
-				if !found {
-					otherParent, err := p.Store.GetEvent(otherParentHash)
-					if err != nil {
-						return err
-					}
-					otherParentCreatorIDs[i] = p.Participants.ByPubKey[otherParent.Creator()].ID
-					otherParentIndexes[i] = otherParent.Index()
+			}
+			if !ok || !found {
+				otherParent, err := p.Store.GetEvent(otherParentHash)
+				if err != nil {
+					return err
 				}
+				otherParentCreatorIDs[i] = p.Participants.ByPubKey[otherParent.Creator()].ID
+				otherParentIndexes[i] = otherParent.Index()
 			}
 		}
 	}
