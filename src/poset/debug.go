@@ -8,10 +8,10 @@ import (
 )
 
 func (p *Poset) PrintStat(logger *logrus.Entry) {
-	logger.Warn("****Known events:");
-	for pid_id, index := range p.Store.KnownEvents() {
-		logger.Warn("    index=", index, " peer=", p.Participants.ById[int64(pid_id)].NetAddr,
-			" pubKeyHex=", p.Participants.ById[int64(pid_id)].PubKeyHex)
+	logger.Warn("****Known events:")
+	for pid_id, index := range p.store.KnownEvents() {
+		logger.Warn("    index=", index, " peer=", p.participants.ById[int64(pid_id)].NetAddr,
+			" pubKeyHex=", p.participants.ById[int64(pid_id)].PubKeyHex)
 	}
 }
 
@@ -23,4 +23,3 @@ func (s *BadgerStore) TopologicalEvents() ([]Event, error) {
 func (s *InmemStore) TopologicalEvents() ([]Event, error) {
 	return []Event{}, nil
 }
-

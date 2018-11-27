@@ -153,7 +153,7 @@ type play struct {
 	otherParent string
 	name        string
 	txPayload   [][]byte
-	sigPayload  []BlockSignature
+	sigPayload  []*BlockSignature
 	knownRoots  []string
 }
 
@@ -248,7 +248,7 @@ func initPosetFull(t testing.TB, plays []play, db bool, n int,
 
 	// Add reference to each participants' root event
 	for i, peer := range participants.ToPeerSlice() {
-		root, err := poset.Store.GetRoot(peer.PubKeyHex)
+		root, err := poset.store.GetRoot(peer.PubKeyHex)
 		if err != nil {
 			panic(err)
 		}
@@ -290,7 +290,7 @@ func initPoset(t *testing.T) (*Poset, map[string]string) {
 		testLogger(t))
 
 	for i, ev := range *orderedEvents {
-		if err := p.Store.SetEvent(ev); err != nil {
+		if err := p.store.SetEvent(ev); err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
 	}
@@ -552,7 +552,7 @@ func TestInsertEvent(t *testing.T) {
 	p, index, _ := initRoundPoset(t)
 
 	checkParents := func(e, selfAncestor, ancestor string) bool {
-		ev, err := p.Store.GetEvent(index[e])
+		ev, err := p.store.GetEvent(index[e])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -561,7 +561,7 @@ func TestInsertEvent(t *testing.T) {
 
 	t.Run("Check Event Coordinates", func(t *testing.T) {
 
-		e0Event, err := p.Store.GetEvent(index[e0])
+		e0Event, err := p.store.GetEvent(index[e0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -569,40 +569,40 @@ func TestInsertEvent(t *testing.T) {
 		if !(e0Event.Message.SelfParentIndex == -1 &&
 			e0Event.Message.OtherParentCreatorID == -1 &&
 			e0Event.Message.OtherParentIndex == -1 &&
-			e0Event.Message.CreatorID == p.Participants.ByPubKey[e0Event.Creator()].ID) {
+			e0Event.Message.CreatorID == p.participants.ByPubKey[e0Event.Creator()].ID) {
 			t.Fatalf("Invalid wire info on %s", e0)
 		}
 
-		e21Event, err := p.Store.GetEvent(index[e21])
+		e21Event, err := p.store.GetEvent(index[e21])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		e10Event, err := p.Store.GetEvent(index[e10])
+		e10Event, err := p.store.GetEvent(index[e10])
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		if !(e21Event.Message.SelfParentIndex == 1 &&
-			e21Event.Message.OtherParentCreatorID == p.Participants.ByPubKey[e10Event.Creator()].ID &&
+			e21Event.Message.OtherParentCreatorID == p.participants.ByPubKey[e10Event.Creator()].ID &&
 			e21Event.Message.OtherParentIndex == 1 &&
-			e21Event.Message.CreatorID == p.Participants.ByPubKey[e21Event.Creator()].ID) {
+			e21Event.Message.CreatorID == p.participants.ByPubKey[e21Event.Creator()].ID) {
 			t.Fatalf("Invalid wire info on %s", e21)
 		}
 
-		f1Event, err := p.Store.GetEvent(index[f1])
+		f1Event, err := p.store.GetEvent(index[f1])
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		if !(f1Event.Message.SelfParentIndex == 2 &&
-			f1Event.Message.OtherParentCreatorID == p.Participants.ByPubKey[e0Event.Creator()].ID &&
+			f1Event.Message.OtherParentCreatorID == p.participants.ByPubKey[e0Event.Creator()].ID &&
 			f1Event.Message.OtherParentIndex == 2 &&
-			f1Event.Message.CreatorID == p.Participants.ByPubKey[f1Event.Creator()].ID) {
+			f1Event.Message.CreatorID == p.participants.ByPubKey[f1Event.Creator()].ID) {
 			t.Fatalf("Invalid wire info on %s", f1)
 		}
 
-		e0CreatorID := strconv.FormatInt(p.Participants.ByPubKey[e0Event.Creator()].ID, 10)
+		e0CreatorID := strconv.FormatInt(p.participants.ByPubKey[e0Event.Creator()].ID, 10)
 
 		type Hierarchy struct {
 			ev, selfAncestor, ancestor string
@@ -623,7 +623,7 @@ func TestInsertEvent(t *testing.T) {
 		}
 	})
 
-	t.Run("Check UndeterminedEvents", func(t *testing.T) {
+	t.Run("Check undetermined events", func(t *testing.T) {
 
 		expectedUndeterminedEvents := []string{
 			index[e0],
@@ -639,17 +639,16 @@ func TestInsertEvent(t *testing.T) {
 			index[s11]}
 
 		for i, eue := range expectedUndeterminedEvents {
-			if ue := p.UndeterminedEvents[i]; ue != eue {
-				t.Fatalf("UndeterminedEvents[%d] should be %s, not %s",
+			if ue := p.GetUndeterminedEvents()[i]; ue != eue {
+				t.Fatalf("undetermined event %d should be %s, not %s",
 					i, eue, ue)
 			}
 		}
 
 		// Pending loaded Events
 		// 3 Events with index 0,
-		// 1 Event with non-empty Transactions
-		// = 4 Loaded Events
-		if ple := p.PendingLoadedEvents; ple != 4 {
+		// 1 Event with non-empty Transactions = 4 Loaded Events
+		if ple := p.GetPendingLoadedEvents(); ple != 4 {
 			t.Fatalf("PendingLoadedEvents should be 4, not %d", ple)
 		}
 	})
@@ -662,7 +661,7 @@ func TestReadWireInfo(t *testing.T) {
 		if k[0] == 'r' {
 			continue
 		}
-		ev, err := p.Store.GetEvent(evh)
+		ev, err := p.store.GetEvent(evh)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -674,11 +673,8 @@ func TestReadWireInfo(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !reflect.DeepEqual(ev.Message.Body.BlockSignatures,
-			evFromWire.Message.Body.BlockSignatures) {
-			t.Fatalf("Error converting %s.Body.BlockSignatures"+
-				" from light wire", k)
-		}
+		compareBlockSignatures(t, evFromWire.Message.Body.BlockSignatures,
+			ev.Message.Body.BlockSignatures)
 
 		if !ev.Message.Body.Equals(evFromWire.Message.Body) {
 			t.Fatalf("Error converting %s.Body from light wire", k)
@@ -751,13 +747,13 @@ func TestWitness(t *testing.T) {
 		Witness: true, Famous: Trilean_UNDEFINED}
 	round0Witnesses[index[e2]] = &RoundEvent{
 		Witness: true, Famous: Trilean_UNDEFINED}
-	p.Store.SetRound(0, RoundInfo{
+	p.store.SetRound(0, RoundInfo{
 		Message: RoundInfoMessage{Events: round0Witnesses}})
 
 	round1Witnesses := make(map[string]*RoundEvent)
 	round1Witnesses[index[f1]] = &RoundEvent{
 		Witness: true, Famous: Trilean_UNDEFINED}
-	p.Store.SetRound(1, RoundInfo{
+	p.store.SetRound(1, RoundInfo{
 		Message: RoundInfoMessage{Events: round1Witnesses}})
 
 	expected := []ancestryItem{
@@ -793,7 +789,7 @@ func TestRound(t *testing.T) {
 		Witness: true, Famous: Trilean_UNDEFINED}
 	round0Witnesses[index[e2]] = &RoundEvent{
 		Witness: true, Famous: Trilean_UNDEFINED}
-	p.Store.SetRound(0, RoundInfo{Message: RoundInfoMessage{
+	p.store.SetRound(0, RoundInfo{Message: RoundInfoMessage{
 		Events: round0Witnesses}})
 
 	round1Witnesses := make(map[string]*RoundEvent)
@@ -803,7 +799,7 @@ func TestRound(t *testing.T) {
 		Witness: true, Famous: Trilean_UNDEFINED}
 	round1Witnesses[index[f1]] = &RoundEvent{
 		Witness: true, Famous: Trilean_UNDEFINED}
-	p.Store.SetRound(1, RoundInfo{
+	p.store.SetRound(1, RoundInfo{
 		Message: RoundInfoMessage{Events: round1Witnesses}})
 
 	expected := []roundItem{
@@ -841,7 +837,7 @@ func TestRoundDiff(t *testing.T) {
 		Witness: true, Famous: Trilean_UNDEFINED}
 	round0Witnesses[index[e2]] = &RoundEvent{
 		Witness: true, Famous: Trilean_UNDEFINED}
-	p.Store.SetRound(0, RoundInfo{
+	p.store.SetRound(0, RoundInfo{
 		Message: RoundInfoMessage{Events: round0Witnesses}})
 
 	round1Witnesses := make(map[string]*RoundEvent)
@@ -851,7 +847,7 @@ func TestRoundDiff(t *testing.T) {
 		Witness: true, Famous: Trilean_UNDEFINED}
 	round1Witnesses[index[f1]] = &RoundEvent{
 		Witness: true, Famous: Trilean_UNDEFINED}
-	p.Store.SetRound(1,
+	p.store.SetRound(1,
 		RoundInfo{Message: RoundInfoMessage{Events: round1Witnesses}})
 
 	if d, err := p.roundDiff(index[s11], index[e21]); d != 1 {
@@ -882,11 +878,11 @@ func TestDivideRounds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if l := p.Store.LastRound(); l != 2 {
+	if l := p.store.LastRound(); l != 2 {
 		t.Fatalf("last round should be 2 not %d", l)
 	}
 
-	round0, err := p.Store.GetRound(0)
+	round0, err := p.store.GetRound(0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -903,7 +899,7 @@ func TestDivideRounds(t *testing.T) {
 		t.Fatalf("round 0 witnesses should contain %s", e2)
 	}
 
-	round1, err := p.Store.GetRound(1)
+	round1, err := p.store.GetRound(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -914,7 +910,7 @@ func TestDivideRounds(t *testing.T) {
 		t.Fatalf("round 1 witnesses should contain %s", f1)
 	}
 
-	round2, err := p.Store.GetRound(2)
+	round2, err := p.store.GetRound(2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -936,7 +932,7 @@ func TestDivideRounds(t *testing.T) {
 			Decided: false,
 		},
 	}
-	for i, pd := range p.PendingRounds {
+	for i, pd := range p.getPendingRounds() {
 		if !reflect.DeepEqual(*pd, expectedPendingRounds[i]) {
 			t.Fatalf("pendingRounds[%d] should be %v, not %v",
 				i, expectedPendingRounds[i], *pd)
@@ -962,7 +958,7 @@ func TestDivideRounds(t *testing.T) {
 	}
 
 	for e, et := range expectedTimestamps {
-		ev, err := p.Store.GetEvent(index[e])
+		ev, err := p.store.GetEvent(index[e])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -980,7 +976,7 @@ func TestCreateRoot(t *testing.T) {
 	p, index, _ := initRoundPoset(t)
 	p.DivideRounds()
 
-	participants := p.Participants.ToPeerSlice()
+	participants := p.participants.ToPeerSlice()
 
 	baseRoot := NewBaseRoot(participants[0].ID)
 
@@ -1016,7 +1012,7 @@ func TestCreateRoot(t *testing.T) {
 	}
 
 	for evh, expRoot := range expected {
-		ev, err := p.Store.GetEvent(index[evh])
+		ev, err := p.store.GetEvent(index[evh])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1080,7 +1076,7 @@ func initDentedPoset(t *testing.T) (*Poset, map[string]string) {
 func TestCreateRootBis(t *testing.T) {
 	p, index := initDentedPoset(t)
 
-	participants := p.Participants.ToPeerSlice()
+	participants := p.participants.ToPeerSlice()
 
 	root := NewBaseRootEvent(participants[1].ID)
 	expected := map[string]Root{
@@ -1095,7 +1091,7 @@ func TestCreateRootBis(t *testing.T) {
 	}
 
 	for evh, expRoot := range expected {
-		ev, err := p.Store.GetEvent(index[evh])
+		ev, err := p.store.GetEvent(index[evh])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1130,7 +1126,7 @@ func initBlockPoset(t *testing.T) (*Poset, []TestNode, map[string]string) {
 	//create a block and signatures manually
 	block := NewBlock(0, 1, []byte("framehash"),
 		[][]byte{[]byte("block tx")})
-	err := poset.Store.SetBlock(block)
+	err := poset.store.SetBlock(block)
 	if err != nil {
 		t.Fatalf("error setting block. Err: %s", err)
 	}
@@ -1147,17 +1143,18 @@ func initBlockPoset(t *testing.T) (*Poset, []TestNode, map[string]string) {
 func TestInsertEventsWithBlockSignatures(t *testing.T) {
 	p, nodes, index := initBlockPoset(t)
 
-	block, err := p.Store.GetBlock(0)
+	block, err := p.store.GetBlock(0)
 	if err != nil {
 		t.Fatalf("error retrieving block 0. %s", err)
 	}
 
-	blockSigs := make([]BlockSignature, n)
-	for k, n := range nodes {
-		blockSigs[k], err = block.Sign(n.Key)
+	var blockSigs []*BlockSignature
+	for _, node := range nodes {
+		sig, err := block.Sign(node.Key)
 		if err != nil {
 			t.Fatal(err)
 		}
+		blockSigs = append(blockSigs, &sig)
 	}
 
 	t.Run("InsertingEventsWithValidSignatures", func(t *testing.T) {
@@ -1171,11 +1168,11 @@ func TestInsertEventsWithBlockSignatures(t *testing.T) {
 			0   1    2
 		*/
 		plays := []play{
-			{1, 1, e1, e0, e10, nil, []BlockSignature{blockSigs[1]},
+			{1, 1, e1, e0, e10, nil, []*BlockSignature{blockSigs[1]},
 				[]string{}},
-			{2, 1, e2, "", s20, nil, []BlockSignature{blockSigs[2]},
+			{2, 1, e2, "", s20, nil, []*BlockSignature{blockSigs[2]},
 				[]string{}},
-			{0, 1, e0, "", s00, nil, []BlockSignature{blockSigs[0]},
+			{0, 1, e0, "", s00, nil, []*BlockSignature{blockSigs[0]},
 				[]string{}},
 		}
 
@@ -1194,7 +1191,7 @@ func TestInsertEventsWithBlockSignatures(t *testing.T) {
 		}
 
 		// Check SigPool
-		if l := len(p.SigPool); l != 3 {
+		if l := len(p.GetSigPool()); l != 3 {
 			t.Fatalf("block signature pool should contain 3 signatures,"+
 				" not %d", l)
 		}
@@ -1203,13 +1200,13 @@ func TestInsertEventsWithBlockSignatures(t *testing.T) {
 		p.ProcessSigPool()
 
 		// Check that the block contains 3 signatures
-		block, _ := p.Store.GetBlock(0)
+		block, _ := p.store.GetBlock(0)
 		if l := len(block.Signatures); l != 2 {
 			t.Fatalf("block 0 should contain 2 signatures, not %d", l)
 		}
 
 		// Check that SigPool was cleared
-		if l := len(p.SigPool); l != 0 {
+		if l := len(p.GetSigPool()); l != 0 {
 			t.Fatalf("block signature pool should contain 0 signatures,"+
 				" not %d", l)
 		}
@@ -1224,13 +1221,13 @@ func TestInsertEventsWithBlockSignatures(t *testing.T) {
 			sig, _ := block1.Sign(nodes[2].Key)
 
 			// unknown block
-			unknownBlockSig := BlockSignature{
+			unknownBlockSig := &BlockSignature{
 				Validator: nodes[2].Pub,
 				Index:     1,
 				Signature: sig.Signature,
 			}
-			pl := play{2, 2, s20, e10, e21, nil, []BlockSignature{unknownBlockSig},
-				[]string{}}
+			pl := play{2, 2, s20, e10, e21, nil,
+				[]*BlockSignature{unknownBlockSig}, []string{}}
 
 			e := NewEvent(nil,
 				nil,
@@ -1245,7 +1242,7 @@ func TestInsertEventsWithBlockSignatures(t *testing.T) {
 			}
 
 			// check that the event was recorded
-			_, err := p.Store.GetEvent(index[e21])
+			_, err := p.store.GetEvent(index[e21])
 			if err != nil {
 				t.Fatalf("ERROR fetching Event %s: %s", e21, err)
 			}
@@ -1263,7 +1260,7 @@ func TestInsertEventsWithBlockSignatures(t *testing.T) {
 			badNode := NewTestNode(key, 666)
 			badNodeSig, _ := block.Sign(badNode.Key)
 
-			pl := play{0, 2, s00, e21, e02, nil, []BlockSignature{badNodeSig},
+			pl := play{0, 2, s00, e21, e02, nil, []*BlockSignature{&badNodeSig},
 				[]string{}}
 
 			e := NewEvent(nil,
@@ -1279,7 +1276,7 @@ func TestInsertEventsWithBlockSignatures(t *testing.T) {
 			}
 
 			// check that the signature was not appended to the block
-			block, _ := p.Store.GetBlock(0)
+			block, _ := p.store.GetBlock(0)
 			if l := len(block.Signatures); l > 3 {
 				t.Fatalf("Block 0 should contain 3 signatures, not %d", l)
 			}
@@ -1429,7 +1426,7 @@ func TestDivideRoundsBis(t *testing.T) {
 	}
 
 	for e, et := range expectedTimestamps {
-		ev, err := p.Store.GetEvent(index[e])
+		ev, err := p.store.GetEvent(index[e])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1451,7 +1448,7 @@ func TestDecideFame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	round0, err := p.Store.GetRound(0)
+	round0, err := p.store.GetRound(0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1468,7 +1465,7 @@ func TestDecideFame(t *testing.T) {
 		t.Fatalf("%s should be famous; got %v", e2, f)
 	}
 
-	round1, err := p.Store.GetRound(1)
+	round1, err := p.store.GetRound(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1485,7 +1482,7 @@ func TestDecideFame(t *testing.T) {
 		t.Fatalf("%s should be famous; got %v", f1, f)
 	}
 
-	round2, err := p.Store.GetRound(2)
+	round2, err := p.store.GetRound(2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1502,7 +1499,7 @@ func TestDecideFame(t *testing.T) {
 		t.Fatalf("%s should be famous; got %v", g2, f)
 	}
 
-	round3, err := p.Store.GetRound(3)
+	round3, err := p.store.GetRound(3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1519,7 +1516,7 @@ func TestDecideFame(t *testing.T) {
 		t.Fatalf("%s should be famous; got %v", h10, f)
 	}
 
-	round4, err := p.Store.GetRound(4)
+	round4, err := p.store.GetRound(4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1547,7 +1544,7 @@ func TestDecideFame(t *testing.T) {
 		{Index: 7, Decided: false},
 		{Index: 8, Decided: false},
 	}
-	for i, pd := range p.PendingRounds {
+	for i, pd := range p.getPendingRounds() {
 		if !reflect.DeepEqual(*pd, expectedPendingRounds[i]) {
 			t.Fatalf("pendingRounds[%d] should be %v, not %v",
 				i, expectedPendingRounds[i], *pd)
@@ -1565,7 +1562,7 @@ func TestDecideRoundReceived(t *testing.T) {
 	}
 
 	for name, hash := range index {
-		e, _ := p.Store.GetEvent(hash)
+		e, _ := p.store.GetEvent(hash)
 
 		switch rune(name[0]) {
 		case rune('e'):
@@ -1579,7 +1576,7 @@ func TestDecideRoundReceived(t *testing.T) {
 		}
 	}
 
-	round0, err := p.Store.GetRound(0)
+	round0, err := p.store.GetRound(0)
 	if err != nil {
 		t.Fatalf("could not retrieve Round 0. %s", err)
 	}
@@ -1587,7 +1584,7 @@ func TestDecideRoundReceived(t *testing.T) {
 		t.Fatalf("round 0 should contain 0 ConsensusEvents, not %d", ce)
 	}
 
-	round1, err := p.Store.GetRound(1)
+	round1, err := p.store.GetRound(1)
 	if err != nil {
 		t.Fatalf("could not retrieve Round 1. %s", err)
 	}
@@ -1595,7 +1592,7 @@ func TestDecideRoundReceived(t *testing.T) {
 		t.Fatalf("round 1 should contain 4 ConsensusEvents, not %d", ce)
 	}
 
-	round2, err := p.Store.GetRound(2)
+	round2, err := p.store.GetRound(2)
 	if err != nil {
 		t.Fatalf("could not retrieve Round 2. %s", err)
 	}
@@ -1623,7 +1620,7 @@ func TestDecideRoundReceived(t *testing.T) {
 	}
 
 	for i, eue := range expectedUndeterminedEvents {
-		if ue := p.UndeterminedEvents[i]; ue != eue {
+		if ue := p.GetUndeterminedEvents()[i]; ue != eue {
 			t.Fatalf("undetermined event %d should be %s, not %s", i, eue, ue)
 		}
 	}
@@ -1639,7 +1636,7 @@ func TestProcessDecidedRounds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	consensusEvents := p.Store.ConsensusEvents()
+	consensusEvents := p.store.ConsensusEvents()
 
 	for i, e := range consensusEvents {
 		t.Logf("consensus[%d]: %s\n", i, getName(index, e))
@@ -1649,11 +1646,11 @@ func TestProcessDecidedRounds(t *testing.T) {
 		t.Fatalf("length of consensus should be 12 not %d", l)
 	}
 
-	if ple := p.PendingLoadedEvents; ple != 3 {
+	if ple := p.GetPendingLoadedEvents(); ple != 3 {
 		t.Fatalf("pending loaded events number should be 3, not %d", ple)
 	}
 
-	block0, err := p.Store.GetBlock(0)
+	block0, err := p.store.GetBlock(0)
 	if err != nil {
 		t.Fatalf("store should contain a block with Index 0: %v", err)
 	}
@@ -1680,7 +1677,7 @@ func TestProcessDecidedRounds(t *testing.T) {
 			frame1Hash, block0.GetFrameHash())
 	}
 
-	block1, err := p.Store.GetBlock(1)
+	block1, err := p.store.GetBlock(1)
 	if err != nil {
 		t.Fatalf("store should contain a block with Index 1: %v", err)
 	}
@@ -1715,14 +1712,14 @@ func TestProcessDecidedRounds(t *testing.T) {
 		{Index: 7, Decided: false},
 		{Index: 8, Decided: false},
 	}
-	for i, pd := range p.PendingRounds {
+	for i, pd := range p.getPendingRounds() {
 		if !reflect.DeepEqual(*pd, expRounds[i]) {
 			t.Fatalf("pending round %d should be %v, not %v", i,
 				expRounds[i], *pd)
 		}
 	}
 
-	if v := p.AnchorBlock; v != nil {
+	if v := p.GetAnchorBlock(); v != nil {
 		t.Fatalf("anchor block should be nil, not %v", v)
 	}
 
@@ -1745,7 +1742,7 @@ func BenchmarkConsensus(b *testing.B) {
 func TestKnown(t *testing.T) {
 	p, _ := initConsensusPoset(false, t)
 
-	participants := p.Participants.ToPeerSlice()
+	participants := p.participants.ToPeerSlice()
 
 	expectedKnown := map[int64]int64{
 		participants[0].ID: 10,
@@ -1753,8 +1750,8 @@ func TestKnown(t *testing.T) {
 		participants[2].ID: 9,
 	}
 
-	known := p.Store.KnownEvents()
-	for i := range p.Participants.ToIDSlice() {
+	known := p.store.KnownEvents()
+	for i := range p.participants.ToIDSlice() {
 		if l := known[int64(i)]; l != expectedKnown[int64(i)] {
 			t.Fatalf("known event %d should be %d, not %d", i,
 				expectedKnown[int64(i)], l)
@@ -1765,7 +1762,7 @@ func TestKnown(t *testing.T) {
 func TestGetFrame(t *testing.T) {
 	p, index := initConsensusPoset(false, t)
 
-	participants := p.Participants.ToPeerSlice()
+	participants := p.participants.ToPeerSlice()
 
 	p.DivideRounds()
 	p.DecideFame()
@@ -1793,7 +1790,7 @@ func TestGetFrame(t *testing.T) {
 
 		hashes := []string{index[e0], index[e1], index[e2], index[e10]}
 		for _, eh := range hashes {
-			e, err := p.Store.GetEvent(eh)
+			e, err := p.store.GetEvent(eh)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1896,7 +1893,7 @@ func TestGetFrame(t *testing.T) {
 		}
 		var expEvents []Event
 		for _, eh := range expectedEventsHashes {
-			e, err := p.Store.GetEvent(eh)
+			e, err := p.store.GetEvent(eh)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1918,7 +1915,7 @@ func TestGetFrame(t *testing.T) {
 			compareEventMessages(t, messages[k], msg, index)
 		}
 
-		block0, err := p.Store.GetBlock(0)
+		block0, err := p.store.GetBlock(0)
 		if err != nil {
 			t.Fatalf("store should contain a block with Index 0: %v", err)
 		}
@@ -1939,14 +1936,14 @@ func TestGetFrame(t *testing.T) {
 func TestResetFromFrame(t *testing.T) {
 	p, index := initConsensusPoset(false, t)
 
-	participants := p.Participants.ToPeerSlice()
+	participants := p.participants.ToPeerSlice()
 
 	p.DivideRounds()
 	p.DecideFame()
 	p.DecideRoundReceived()
 	p.ProcessDecidedRounds()
 
-	block, err := p.Store.GetBlock(1)
+	block, err := p.store.GetBlock(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1962,8 +1959,8 @@ func TestResetFromFrame(t *testing.T) {
 	unmarshalledFrame := new(Frame)
 	unmarshalledFrame.ProtoUnmarshal(marshalledFrame)
 
-	p2 := NewPoset(p.Participants,
-		NewInmemStore(p.Participants, cacheSize),
+	p2 := NewPoset(p.participants,
+		NewInmemStore(p.participants, cacheSize),
 		nil,
 		testLogger(t))
 	err = p2.Reset(block, *unmarshalledFrame)
@@ -1992,8 +1989,8 @@ func TestResetFromFrame(t *testing.T) {
 		participants[2].ID: 3,
 	}
 
-	known := p2.Store.KnownEvents()
-	for _, peer := range p2.Participants.ById {
+	known := p2.store.KnownEvents()
+	for _, peer := range p2.participants.ById {
 		if l := known[peer.ID]; l != expectedKnown[peer.ID] {
 			t.Fatalf("Known[%d] should be %d, not %d",
 				peer.ID, expectedKnown[peer.ID], l)
@@ -2005,11 +2002,11 @@ func TestResetFromFrame(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		pRound1, err := p.Store.GetRound(2)
+		pRound1, err := p.store.GetRound(2)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p2Round1, err := p2.Store.GetRound(2)
+		p2Round1, err := p2.store.GetRound(2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2058,32 +2055,33 @@ func TestResetFromFrame(t *testing.T) {
 		p2.DecideRoundReceived()
 		p2.ProcessDecidedRounds()
 
-		if lbi := p2.Store.LastBlockIndex(); lbi != block.Index() {
-			t.Fatalf("LastBlockIndex should be %d, not %d",
+		if lbi := p2.store.LastBlockIndex(); lbi != block.Index() {
+			t.Fatalf("last block index should be %d, not %d",
 				block.Index(), lbi)
 		}
 
-		if r := p2.LastConsensusRound; r == nil || *r != block.RoundReceived() {
-			t.Fatalf("LastConsensusRound should be %d, not %d",
+		if r := p2.GetLastConsensusRound(); r == nil ||
+			*r != block.RoundReceived() {
+			t.Fatalf("last consensus round should be %d, not %d",
 				block.RoundReceived(), *r)
 		}
 
-		if v := p2.AnchorBlock; v != nil {
-			t.Fatalf("AnchorBlock should be nil, not %v", v)
+		if v := p2.GetAnchorBlock(); v != nil {
+			t.Fatalf("anchor block should be nil, not %v", v)
 		}
 	})
 
 	t.Run("TestContinueAfterReset", func(t *testing.T) {
 		// Insert remaining Events into the Reset poset
 		for r := int64(2); r <= int64(2); r++ {
-			round, err := p.Store.GetRound(r)
+			round, err := p.store.GetRound(r)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			var events []Event
 			for _, e := range round.RoundEvents() {
-				ev, err := p.Store.GetEvent(e)
+				ev, err := p.store.GetEvent(e)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2107,11 +2105,11 @@ func TestResetFromFrame(t *testing.T) {
 		p2.ProcessDecidedRounds()
 
 		for r := int64(2); r <= 2; r++ {
-			pRound, err := p.Store.GetRound(r)
+			pRound, err := p.store.GetRound(r)
 			if err != nil {
 				t.Fatal(err)
 			}
-			p2Round, err := p2.Store.GetRound(r)
+			p2Round, err := p2.store.GetRound(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2139,7 +2137,7 @@ func TestBootstrap(t *testing.T) {
 	p.DecideRoundReceived()
 	p.ProcessDecidedRounds()
 
-	p.Store.Close()
+	p.store.Close()
 	defer os.RemoveAll(badgerDir)
 
 	// Now we want to create a new Poset based on the database of the previous
@@ -2154,38 +2152,33 @@ func TestBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hConsensusEvents := p.Store.ConsensusEvents()
-	nhConsensusEvents := np.Store.ConsensusEvents()
+	hConsensusEvents := p.store.ConsensusEvents()
+	nhConsensusEvents := np.store.ConsensusEvents()
 	if len(hConsensusEvents) != len(nhConsensusEvents) {
 		t.Fatalf("Bootstrapped poset should contain %d consensus events,"+
 			"not %d", len(hConsensusEvents), len(nhConsensusEvents))
 	}
 
-	hKnown := p.Store.KnownEvents()
-	nhKnown := np.Store.KnownEvents()
+	hKnown := p.store.KnownEvents()
+	nhKnown := np.store.KnownEvents()
 	if !reflect.DeepEqual(hKnown, nhKnown) {
 		t.Fatalf("Bootstrapped poset's Known should be %#v, not %#v",
 			hKnown, nhKnown)
 	}
 
-	if *p.LastConsensusRound != *np.LastConsensusRound {
-		t.Fatalf("Bootstrapped poset's LastConsensusRound should be %#v,"+
-			" not %#v", *p.LastConsensusRound, *np.LastConsensusRound)
+	if *p.GetLastConsensusRound() != *np.GetLastConsensusRound() {
+		t.Fatalf("Bootstrapped poset's getLastConsensusRound should be %#v,"+
+			" not %#v", *p.GetLastConsensusRound(), *np.GetLastConsensusRound())
 	}
 
-	if p.LastCommitedRoundEvents != np.LastCommitedRoundEvents {
-		t.Fatalf("Bootstrapped poset's LastCommitedRoundEvents should be %#v,"+
-			" not %#v", p.LastCommitedRoundEvents, np.LastCommitedRoundEvents)
-	}
-
-	if p.ConsensusTransactions != np.ConsensusTransactions {
+	if p.GetConsensusTransactions() != np.GetConsensusTransactions() {
 		t.Fatalf("Bootstrapped poset's ConsensusTransactions should be %#v,"+
-			" not %#v", p.ConsensusTransactions, np.ConsensusTransactions)
+			" not %#v", p.GetConsensusTransactions(), np.GetConsensusTransactions())
 	}
 
-	if p.PendingLoadedEvents != np.PendingLoadedEvents {
+	if p.GetPendingLoadedEvents() != np.GetPendingLoadedEvents() {
 		t.Fatalf("Bootstrapped poset's PendingLoadedEvents should be %#v,"+
-			" not %#v", p.PendingLoadedEvents, np.PendingLoadedEvents)
+			" not %#v", p.GetPendingLoadedEvents(), np.GetPendingLoadedEvents())
 	}
 }
 
@@ -2335,13 +2328,13 @@ func TestFunkyPosetFame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l := p.Store.LastRound()
+	l := p.store.LastRound()
 	if l != 7 {
 		t.Fatalf("last round should be 7 not %d", l)
 	}
 
 	for r := int64(0); r < l+1; r++ {
-		round, err := p.Store.GetRound(r)
+		round, err := p.store.GetRound(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2363,7 +2356,7 @@ func TestFunkyPosetFame(t *testing.T) {
 		{Index: 7, Decided: false},
 	}
 
-	for i, pd := range p.PendingRounds {
+	for i, pd := range p.getPendingRounds() {
 		if !reflect.DeepEqual(*pd, expPendingRounds[i]) {
 			t.Fatalf("pending round %d should be %v, not %v", i,
 				expPendingRounds[i], *pd)
@@ -2377,10 +2370,10 @@ func TestFunkyPosetFame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for i := 5; i < len(p.PendingRounds)+5; i++ {
-		if !reflect.DeepEqual(*p.PendingRounds[i-5], expPendingRounds[i]) {
+	for i := 5; i < len(p.getPendingRounds())+5; i++ {
+		if !reflect.DeepEqual(*p.getPendingRounds()[i-5], expPendingRounds[i]) {
 			t.Fatalf("pending round %d should be %v, not %v", i,
-				expPendingRounds[i], *p.PendingRounds[i-5])
+				expPendingRounds[i], *p.getPendingRounds()[i-5])
 		}
 	}
 }
@@ -2401,13 +2394,13 @@ func TestFunkyPosetBlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l := p.Store.LastRound()
+	l := p.store.LastRound()
 	if l != 7 {
 		t.Fatalf("last round should be 7 not %d", l)
 	}
 
 	for r := int64(0); r < l+1; r++ {
-		round, err := p.Store.GetRound(r)
+		round, err := p.store.GetRound(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2423,7 +2416,7 @@ func TestFunkyPosetBlocks(t *testing.T) {
 		{Index: 6, Decided: false},
 		{Index: 7, Decided: false},
 	}
-	for i, pd := range p.PendingRounds {
+	for i, pd := range p.getPendingRounds() {
 		if !reflect.DeepEqual(*pd, expPendingRounds[i]) {
 			t.Fatalf("pending round %d should be %v, not %v",
 				i, expPendingRounds[i], *pd)
@@ -2433,7 +2426,7 @@ func TestFunkyPosetBlocks(t *testing.T) {
 	expBlockTxCounts := map[int64]int64{0: 4, 1: 3, 2: 5, 3: 7, 4: 3}
 
 	for bi := int64(0); bi < 5; bi++ {
-		b, err := p.Store.GetBlock(bi)
+		b, err := p.store.GetBlock(bi)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2450,7 +2443,7 @@ func TestFunkyPosetBlocks(t *testing.T) {
 func TestFunkyPosetFrames(t *testing.T) {
 	p, index := initFunkyPoset(t, common.NewTestLogger(t), true)
 
-	participants := p.Participants.ToPeerSlice()
+	participants := p.participants.ToPeerSlice()
 
 	if err := p.DivideRounds(); err != nil {
 		t.Fatal(err)
@@ -2466,7 +2459,7 @@ func TestFunkyPosetFrames(t *testing.T) {
 	}
 
 	for bi := int64(0); bi < 5; bi++ {
-		block, err := p.Store.GetBlock(bi)
+		block, err := p.store.GetBlock(bi)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2660,7 +2653,7 @@ func TestFunkyPosetFrames(t *testing.T) {
 	}
 
 	for bi := int64(0); bi < 5; bi++ {
-		block, err := p.Store.GetBlock(bi)
+		block, err := p.store.GetBlock(bi)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2685,7 +2678,7 @@ func TestFunkyPosetReset(t *testing.T) {
 	p.ProcessDecidedRounds()
 
 	for bi := int64(0); bi < 3; bi++ {
-		block, err := p.Store.GetBlock(bi)
+		block, err := p.store.GetBlock(bi)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2701,8 +2694,8 @@ func TestFunkyPosetReset(t *testing.T) {
 		unmarshalledFrame := new(Frame)
 		unmarshalledFrame.ProtoUnmarshal(marshalledFrame)
 
-		p2 := NewPoset(p.Participants,
-			NewInmemStore(p.Participants, cacheSize),
+		p2 := NewPoset(p.participants,
+			NewInmemStore(p.participants, cacheSize),
 			nil,
 			testLogger(t))
 		err = p2.Reset(block, *unmarshalledFrame)
@@ -2712,7 +2705,7 @@ func TestFunkyPosetReset(t *testing.T) {
 
 		// Test continue after reset
 		// Compute diff
-		p2Known := p2.Store.KnownEvents()
+		p2Known := p2.store.KnownEvents()
 		diff := getDiff(p, p2Known, t)
 
 		wireDiff := make([]WireEvent, len(diff), len(diff))
@@ -2868,7 +2861,7 @@ func initSparsePoset(
 func TestSparsePosetFrames(t *testing.T) {
 	p, index := initSparsePoset(t, common.NewTestLogger(t))
 
-	participants := p.Participants.ToPeerSlice()
+	participants := p.participants.ToPeerSlice()
 
 	if err := p.DivideRounds(); err != nil {
 		t.Fatal(err)
@@ -2884,7 +2877,7 @@ func TestSparsePosetFrames(t *testing.T) {
 	}
 
 	for bi := int64(0); bi < 5; bi++ {
-		block, err := p.Store.GetBlock(bi)
+		block, err := p.store.GetBlock(bi)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3101,7 +3094,7 @@ func TestSparsePosetFrames(t *testing.T) {
 	}
 
 	for bi := int64(0); bi < 5; bi++ {
-		block, err := p.Store.GetBlock(bi)
+		block, err := p.store.GetBlock(bi)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3126,7 +3119,7 @@ func TestSparsePosetReset(t *testing.T) {
 	p.ProcessDecidedRounds()
 
 	for bi := 0; bi < 5; bi++ {
-		block, err := p.Store.GetBlock(int64(bi))
+		block, err := p.store.GetBlock(int64(bi))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3142,8 +3135,8 @@ func TestSparsePosetReset(t *testing.T) {
 		unmarshalledFrame := new(Frame)
 		unmarshalledFrame.ProtoUnmarshal(marshalledFrame)
 
-		p2 := NewPoset(p.Participants,
-			NewInmemStore(p.Participants, cacheSize),
+		p2 := NewPoset(p.participants,
+			NewInmemStore(p.participants, cacheSize),
 			nil,
 			testLogger(t))
 		err = p2.Reset(block, *unmarshalledFrame)
@@ -3154,7 +3147,7 @@ func TestSparsePosetReset(t *testing.T) {
 		// Test continue after Reset
 
 		// Compute diff
-		p2Known := p2.Store.KnownEvents()
+		p2Known := p2.store.KnownEvents()
 		diff := getDiff(p, p2Known, t)
 
 		t.Logf("p2.Known: %v", p2Known)
@@ -3189,14 +3182,15 @@ func TestSparsePosetReset(t *testing.T) {
 
 }
 
-func compareRoundWitnesses(p, p2 *Poset, index map[string]string, round int64, check bool, t *testing.T) {
+func compareRoundWitnesses(p, p2 *Poset, index map[string]string,
+	round int64, check bool, t *testing.T) {
 
 	for i := round; i <= 5; i++ {
-		pRound, err := p.Store.GetRound(i)
+		pRound, err := p.store.GetRound(i)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p2Round, err := p2.Store.GetRound(i)
+		p2Round, err := p2.store.GetRound(i)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3225,14 +3219,14 @@ func compareRoundWitnesses(p, p2 *Poset, index map[string]string, round int64, c
 func getDiff(p *Poset, known map[int64]int64, t *testing.T) []Event {
 	var diff []Event
 	for id, ct := range known {
-		pk := p.Participants.ById[id].PubKeyHex
+		pk := p.participants.ById[id].PubKeyHex
 		// get participant Events with index > ct
-		participantEvents, err := p.Store.ParticipantEvents(pk, ct)
+		participantEvents, err := p.store.ParticipantEvents(pk, ct)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, e := range participantEvents {
-			ev, err := p.Store.GetEvent(e)
+			ev, err := p.store.GetEvent(e)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3307,10 +3301,46 @@ func compareEventMessages(t *testing.T, x, exp *EventMessage,
 
 func compareEventBody(t *testing.T, x, exp *EventBody) {
 	if x.Index != exp.Index || !bytes.Equal(x.Creator, exp.Creator) ||
-		!reflect.DeepEqual(x.BlockSignatures, exp.BlockSignatures) ||
-		!reflect.DeepEqual(x.InternalTransactions, exp.InternalTransactions) ||
 		!reflect.DeepEqual(x.Parents, exp.Parents) ||
 		!reflect.DeepEqual(x.Transactions, exp.Transactions) {
 		t.Fatalf("expcted event body: %v, got: %v", exp, x)
+	}
+	compareBlockSignatures(t, x.BlockSignatures, exp.BlockSignatures)
+	compareInternalTransactions(
+		t, x.InternalTransactions, x.InternalTransactions)
+}
+
+func compareInternalTransactions(t *testing.T, x, exp []*InternalTransaction) {
+	if len(x) != len(exp) {
+		t.Fatalf("expcted internal transactions len: %d, got: %d",
+			len(exp), len(x))
+	}
+
+	for k, v := range exp {
+		comparePeers(t, v.Peer, x[k].Peer)
+		if v.Type != x[k].Type {
+			t.Fatalf("expcted type: %v, got: %v", exp, x)
+		}
+	}
+}
+
+func comparePeers(t *testing.T, x, exp *peers.Peer) {
+	if x.ID != exp.ID || x.NetAddr != exp.NetAddr ||
+		x.PubKeyHex != exp.PubKeyHex {
+		t.Fatalf("expcted peer: %v, got: %v", exp, x)
+	}
+}
+
+func compareBlockSignatures(t *testing.T, x, exp []*BlockSignature) {
+	if len(x) != len(exp) {
+		t.Fatalf("expcted signatures len: %d, got: %d",
+			len(exp), len(x))
+	}
+
+	for k, v := range exp {
+		if v.Index != x[k].Index || v.Signature != x[k].Signature ||
+			bytes.Equal(v.Validator, x[k].Validator) {
+			t.Fatalf("expcted signature: %v, got: %v", v, x[k])
+		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/Fantom-foundation/go-lachesis/src/common"
@@ -46,7 +47,7 @@ func initCores(n int, t *testing.T) ([]*Core,
 
 		// Create and save the first Event
 		initialEvent := poset.NewEvent([][]byte(nil),
-			[]poset.InternalTransaction{},
+			nil,
 			nil,
 			[]string{selfParent, ""}, core.PubKey(), 0, flagTable)
 		err := core.SignAndInsertSelfEvent(initialEvent)
@@ -92,11 +93,11 @@ func initPoset(t *testing.T, cores []*Core, keys map[int64]*ecdsa.PrivateKey,
 	}
 
 	// Get flag tables from parents
-	event0, err := cores[0].poset.Store.GetEvent(index["e0"])
+	event0, err := cores[0].poset.Store().GetEvent(index["e0"])
 	if err != nil {
 		t.Fatalf("failed to get parent: %s", err)
 	}
-	event1, err := cores[0].poset.Store.GetEvent(index["e1"])
+	event1, err := cores[0].poset.Store().GetEvent(index["e1"])
 	if err != nil {
 		t.Fatalf("failed to get parent: %s", err)
 	}
@@ -105,7 +106,7 @@ func initPoset(t *testing.T, cores []*Core, keys map[int64]*ecdsa.PrivateKey,
 	event01ft, _ := event0.MergeFlagTable(event1ft)
 
 	event01 := poset.NewEvent([][]byte{},
-		[]poset.InternalTransaction{},
+		nil,
 		nil,
 		[]string{index["e0"], index["e1"]}, // e0 and e1
 		cores[0].PubKey(), 1, event01ft)
@@ -115,7 +116,7 @@ func initPoset(t *testing.T, cores []*Core, keys map[int64]*ecdsa.PrivateKey,
 	}
 
 	// Get flag tables from parents
-	event2, err := cores[2].poset.Store.GetEvent(index["e2"])
+	event2, err := cores[2].poset.Store().GetEvent(index["e2"])
 	if err != nil {
 		t.Fatalf("failed to get parent: %s", err)
 	}
@@ -123,7 +124,7 @@ func initPoset(t *testing.T, cores []*Core, keys map[int64]*ecdsa.PrivateKey,
 	event20ft, _ := event2.MergeFlagTable(event01ft)
 
 	event20 := poset.NewEvent([][]byte{},
-		[]poset.InternalTransaction{},
+		nil,
 		nil,
 		[]string{index["e2"], index["e01"]}, // e2 and e01
 		cores[2].PubKey(), 1, event20ft)
@@ -135,7 +136,7 @@ func initPoset(t *testing.T, cores []*Core, keys map[int64]*ecdsa.PrivateKey,
 	event12ft, _ := event1.MergeFlagTable(event20ft)
 
 	event12 := poset.NewEvent([][]byte{},
-		[]poset.InternalTransaction{},
+		nil,
 		nil,
 		[]string{index["e1"], index["e20"]}, // e1 and e20
 		cores[1].PubKey(), 1, event12ft)
@@ -884,7 +885,7 @@ func TestCoreFastForward(t *testing.T) {
 		}
 	})
 
-	block0, err := cores[1].poset.Store.GetBlock(0)
+	block0, err := cores[1].poset.Store().GetBlock(0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -892,7 +893,7 @@ func TestCoreFastForward(t *testing.T) {
 	// collect signatures
 	signatures := make([]poset.BlockSignature, 3)
 	for k, c := range cores[1:] {
-		b, err := c.poset.Store.GetBlock(0)
+		b, err := c.poset.Store().GetBlock(0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -909,22 +910,21 @@ func TestCoreFastForward(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Save Block
-		if err := cores[1].poset.Store.SetBlock(block0); err != nil {
+		// Save block
+		if err := cores[1].poset.Store().SetBlock(block0); err != nil {
 			t.Fatal(err)
 		}
-		// Assign AnchorBlock
-		cores[1].poset.AnchorBlock = new(int64)
-		*cores[1].poset.AnchorBlock = 0
+		// Assign anchor block
+		cores[1].poset.SetAnchorBlock(0)
 
-		// Now the function should find an AnchorBlock
+		// Now the function should find an anchor block
 		block, frame, err := cores[1].GetAnchorBlockWithFrame()
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		err = cores[0].FastForward(cores[1].hexID, block, frame)
-		// We should get an error because AnchorBlock doesnt contain enough
+		// We should get an error because anchor block doesnt contain enough
 		// signatures
 		if err == nil {
 			t.Fatal("FastForward should throw an error because the Block" +
@@ -941,7 +941,7 @@ func TestCoreFastForward(t *testing.T) {
 		}
 
 		// Save Block
-		if err := cores[1].poset.Store.SetBlock(block0); err != nil {
+		if err := cores[1].poset.Store().SetBlock(block0); err != nil {
 			t.Fatal(err)
 		}
 
@@ -976,11 +976,11 @@ func TestCoreFastForward(t *testing.T) {
 			t.Fatalf("Cores[0] last consensus Round should be 1, not %v", r)
 		}
 
-		if lbi := cores[0].poset.Store.LastBlockIndex(); lbi != 0 {
+		if lbi := cores[0].poset.Store().LastBlockIndex(); lbi != 0 {
 			t.Fatalf("Cores[0].poset.LastBlockIndex should be 0, not %d", lbi)
 		}
 
-		sBlock, err := cores[0].poset.Store.GetBlock(block.Index())
+		sBlock, err := cores[0].poset.Store().GetBlock(block.Index())
 		if err != nil {
 			t.Fatalf("Error retrieving latest Block from reset poset: %v", err)
 		}
@@ -988,7 +988,7 @@ func TestCoreFastForward(t *testing.T) {
 			t.Fatalf("Blocks defer")
 		}
 
-		lastEventFrom0, _, err := cores[0].poset.Store.LastEventFrom(
+		lastEventFrom0, _, err := cores[0].poset.Store().LastEventFrom(
 			cores[0].hexID)
 		if err != nil {
 			t.Fatal(err)
@@ -1038,4 +1038,41 @@ func getName(index map[string]string, hash string) string {
 		}
 	}
 	return fmt.Sprintf("%s not found", hash)
+}
+
+func TestInternalTransactions(t *testing.T) {
+	cores, _, _ := initCores(4, t)
+
+	tx := poset.NewInternalTransaction(poset.TransactionType_PEER_ADD,
+		*peers.NewPeer("0xaa", ""))
+	wg := sync.WaitGroup{}
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10000; i++ {
+			cores[0].internalTxPool.add(
+				[]*poset.InternalTransaction{&tx})
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10000; i++ {
+			cores[0].internalTxPool.clean()
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10000; i++ {
+			cores[0].internalTxPool.len()
+		}
+	}()
+
+	for i := 0; i < 10000; i++ {
+		cores[0].internalTxPool.get()
+	}
+
+	wg.Wait()
 }

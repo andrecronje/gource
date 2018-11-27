@@ -8,7 +8,7 @@ import (
 
 	"github.com/Fantom-foundation/go-lachesis/src/poset"
 	"github.com/sirupsen/logrus"
-        "github.com/tebeka/atexit"
+	"github.com/tebeka/atexit"
 )
 
 type InfosLite struct {
@@ -17,19 +17,18 @@ type InfosLite struct {
 	Blocks            []poset.Block
 }
 
-
 type EventBodyLite struct {
-	Parents         []string         //hashes of the event's parents, self-parent first
-	Creator         string           //creator's public key
-	Index           int64            //index in the sequence of events created by Creator
+	Parents []string //hashes of the event's parents, self-parent first
+	Creator string   //creator's public key
+	Index   int64    //index in the sequence of events created by Creator
 }
 
 type EventMessageLite struct {
-	Body      EventBodyLite
-	Signature string //creator's digital signature of body
+	Body             EventBodyLite
+	Signature        string //creator's digital signature of body
 	TopologicalIndex int
 
-//	FlagTable []byte // FlagTable stores connection information
+	//	FlagTable []byte // FlagTable stores connection information
 }
 type EventLite struct {
 	CreatorID            int64
@@ -37,13 +36,11 @@ type EventLite struct {
 	Message EventMessageLite
 }
 
-
 func (g *Graph) GetParticipantEventsLite() map[string]map[string]EventLite {
 	res := make(map[string]map[string]EventLite)
 
-	store := g.Node.core.poset.Store
-	peers := g.Node.core.poset.Participants
-
+	store := g.Node.core.poset.store
+	peers := g.Node.core.poset.participants
 
 	//		evs, err := store.ParticipantEvents(p.PubKeyHex, root.SelfParent.Index)
 	evs, err := store.TopologicalEvents()
@@ -52,8 +49,7 @@ func (g *Graph) GetParticipantEventsLite() map[string]map[string]EventLite {
 		panic(err)
 	}
 
-	res[g.Node.localAddr/*p.PubKeyHex*/] = make(map[string]EventLite)
-
+	res[g.Node.localAddr /*p.PubKeyHex*/] = make(map[string]EventLite)
 
 	for _, event := range evs {
 
@@ -66,19 +62,19 @@ func (g *Graph) GetParticipantEventsLite() map[string]map[string]EventLite {
 		lite_event := EventLite{
 			CreatorID: event.CreatorID(),
 			OtherParentCreatorID: event.OtherParentCreatorID(),
-			Message: EventMessageLite {
+			Message: EventMessageLite{
 				Body: EventBodyLite{
 					Parents: event.Message.Body.Parents,
 					Creator: peers.ByPubKey[event.Creator()].NetAddr,
-					Index: event.Message.Body.Index,
+					Index:   event.Message.Body.Index,
 				},
 				Signature: event.Message.Signature,
-				//				TopologicalIndex: event.TopologicalIndex,
+				//				TopologicalIndex: event.GetTopologicalIndex(),
 				//				FlagTable: event.FlagTable,
 			},
 		}
 
-		res[g.Node.localAddr/*p.PubKeyHex*/][hash] = lite_event
+		res[g.Node.localAddr /*p.PubKeyHex*/][hash] = lite_event
 	}
 
 	return res
@@ -88,7 +84,7 @@ func (g *Graph) GetInfosLite() InfosLite {
 	return InfosLite{
 		ParticipantEvents: g.GetParticipantEventsLite(),
 		Rounds:            g.GetRounds(),
-    Blocks:            g.GetBlocks(),
+		Blocks:            g.GetBlocks(),
 	}
 }
 

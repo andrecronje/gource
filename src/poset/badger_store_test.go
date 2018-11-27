@@ -163,8 +163,8 @@ func TestDBEventMethods(t *testing.T) {
 		for k := int64(0); k < testSize; k++ {
 			event := NewEvent(
 				[][]byte{[]byte(fmt.Sprintf("%s_%d", p.hex[:5], k))},
-				[]InternalTransaction{},
-				[]BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
+				nil,
+				[]*BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
 				[]string{"", ""},
 				p.pubKey,
 				k, nil)
@@ -264,8 +264,8 @@ func TestDBRoundMethods(t *testing.T) {
 	events := make(map[string]Event)
 	for _, p := range participants {
 		event := NewEvent([][]byte{},
-			[]InternalTransaction{},
-			[]BlockSignature{},
+			nil,
+			nil,
 			[]string{"", ""},
 			p.pubKey,
 			0, nil)
@@ -403,8 +403,8 @@ func TestDBFrameMethods(t *testing.T) {
 	for id, p := range participants {
 		event := NewEvent(
 			[][]byte{[]byte(fmt.Sprintf("%s_%d", p.hex[:5], 0))},
-			[]InternalTransaction{},
-			[]BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
+			nil,
+			[]*BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
 			[]string{"", ""},
 			p.pubKey,
 			0, nil)
@@ -453,8 +453,8 @@ func TestBadgerEvents(t *testing.T) {
 		var items []Event
 		for k := int64(0); k < testSize; k++ {
 			event := NewEvent([][]byte{[]byte(fmt.Sprintf("%s_%d", p.hex[:5], k))},
-				[]InternalTransaction{},
-				[]BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
+				nil,
+				[]*BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
 				[]string{"", ""},
 				p.pubKey,
 				k, nil)
@@ -546,8 +546,8 @@ func TestBadgerRounds(t *testing.T) {
 	events := make(map[string]Event)
 	for _, p := range participants {
 		event := NewEvent([][]byte{},
-			[]InternalTransaction{},
-			[]BlockSignature{},
+			nil,
+			nil,
 			[]string{"", ""},
 			p.pubKey,
 			0, nil)
@@ -663,8 +663,8 @@ func TestBadgerFrames(t *testing.T) {
 	for id, p := range participants {
 		event := NewEvent(
 			[][]byte{[]byte(fmt.Sprintf("%s_%d", p.hex[:5], 0))},
-			[]InternalTransaction{},
-			[]BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
+			nil,
+			[]*BlockSignature{{Validator: []byte("validator"), Index: 0, Signature: "r|s"}},
 			[]string{"", ""},
 			p.pubKey,
 			0, nil)

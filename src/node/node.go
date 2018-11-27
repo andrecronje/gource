@@ -29,7 +29,6 @@ type Node struct {
 	localAddr string
 
 	peerSelector PeerSelector
-	selectorLock sync.Mutex
 
 	trans net.Transport
 	netCh <-chan net.RPC
@@ -157,12 +156,12 @@ func (n *Node) Run(gossip bool) {
 }
 
 func (n *Node) resetTimer() {
-	if !n.controlTimer.set {
+	if !n.controlTimer.IsSet() {
 		ts := n.conf.HeartbeatTimeout
 		//Slow gossip if nothing interesting to say
-		if n.core.poset.PendingLoadedEvents == 0 &&
-			len(n.core.transactionPool) == 0 &&
-			len(n.core.blockSignaturePool) == 0 {
+		if n.core.poset.GetPendingLoadedEvents() == 0 &&
+			n.core.txPool.len() == 0 &&
+			n.core.blockSignaturePool.len() == 0 {
 			ts = time.Duration(time.Second)
 		}
 		n.controlTimer.resetCh <- ts
@@ -178,9 +177,10 @@ func (n *Node) doBackgroundWork() {
 			n.resetTimer()
 		case t := <-n.submitInternalCh:
 			n.logger.Debug("Adding Internal Transaction")
-			n.addInternalTransaction(t)
+			n.addInternalTransaction(&t)
 			n.resetTimer()
 		case block := <-n.commitCh:
+			block = *block.Copy()
 			n.logger.WithFields(logrus.Fields{
 				"index":          block.Index(),
 				"round_received": block.RoundReceived(),
@@ -387,9 +387,7 @@ func (n *Node) gossip(peerAddr string, parentReturnCh chan struct{}) error {
 	}
 
 	// update peer selector
-	n.selectorLock.Lock()
 	n.peerSelector.UpdateLast(peerAddr)
-	n.selectorLock.Unlock()
 
 	return nil
 }
@@ -647,10 +645,10 @@ func (n *Node) addTransaction(tx []byte) {
 	n.core.AddTransactions([][]byte{tx})
 }
 
-func (n *Node) addInternalTransaction(tx poset.InternalTransaction) {
+func (n *Node) addInternalTransaction(tx *poset.InternalTransaction) {
 	n.coreLock.Lock()
 	defer n.coreLock.Unlock()
-	n.core.AddInternalTransactions([]poset.InternalTransaction{tx})
+	n.core.AddInternalTransactions([]*poset.InternalTransaction{tx})
 }
 
 func (n *Node) Shutdown() {
@@ -672,7 +670,7 @@ func (n *Node) Shutdown() {
 		// transport and store should only be closed once all concurrent operations
 		// are finished otherwise they will panic trying to use close objects
 		n.trans.Close()
-		n.core.poset.Store.Close()
+		n.core.poset.Store().Close()
 	}
 }
 
@@ -708,13 +706,12 @@ func (n *Node) GetStats() map[string]string {
 		"sync_limit":              strconv.FormatInt(n.conf.SyncLimit, 10),
 		"consensus_transactions":  strconv.FormatUint(consensusTransactions, 10),
 		"undetermined_events":     strconv.Itoa(len(n.core.GetUndeterminedEvents())),
-		"transaction_pool":        strconv.Itoa(len(n.core.transactionPool)),
+		"transaction_pool":        strconv.Itoa(n.core.txPool.len()),
 		"num_peers":               strconv.Itoa(n.peerSelector.Peers().Len()),
 		"sync_rate":               strconv.FormatFloat(n.SyncRate(), 'f', 2, 64),
 		"transactions_per_second": strconv.FormatFloat(transactionsPerSecond, 'f', 2, 64),
 		"events_per_second":       strconv.FormatFloat(consensusEventsPerSecond, 'f', 2, 64),
 		"rounds_per_second":       strconv.FormatFloat(consensusRoundsPerSecond, 'f', 2, 64),
-		"round_events":            strconv.Itoa(n.core.GetLastCommittedRoundEventsCount()),
 		"id":                      strconv.FormatInt(n.id, 10),
 		"state":                   n.getState().String(),
 	}
@@ -754,19 +751,19 @@ func (n *Node) SyncRate() float64 {
 }
 
 func (n *Node) GetParticipants() (*peers.Peers, error) {
-	return n.core.poset.Store.Participants()
+	return n.core.poset.Store().Participants()
 }
 
 func (n *Node) GetEvent(event string) (poset.Event, error) {
-	return n.core.poset.Store.GetEvent(event)
+	return n.core.poset.Store().GetEvent(event)
 }
 
 func (n *Node) GetLastEventFrom(participant string) (string, bool, error) {
-	return n.core.poset.Store.LastEventFrom(participant)
+	return n.core.poset.Store().LastEventFrom(participant)
 }
 
 func (n *Node) GetKnownEvents() map[int64]int64 {
-	return n.core.poset.Store.KnownEvents()
+	return n.core.poset.Store().KnownEvents()
 }
 
 func (n *Node) GetEvents() (map[int64]int64, error) {
@@ -775,7 +772,7 @@ func (n *Node) GetEvents() (map[int64]int64, error) {
 }
 
 func (n *Node) GetConsensusEvents() []string {
-	return n.core.poset.Store.ConsensusEvents()
+	return n.core.poset.Store().ConsensusEvents()
 }
 
 func (n *Node) GetConsensusTransactionsCount() uint64 {
@@ -783,27 +780,27 @@ func (n *Node) GetConsensusTransactionsCount() uint64 {
 }
 
 func (n *Node) GetRound(roundIndex int64) (poset.RoundInfo, error) {
-	return n.core.poset.Store.GetRound(roundIndex)
+	return n.core.poset.Store().GetRound(roundIndex)
 }
 
 func (n *Node) GetLastRound() int64 {
-	return n.core.poset.Store.LastRound()
+	return n.core.poset.Store().LastRound()
 }
 
 func (n *Node) GetRoundWitnesses(roundIndex int64) []string {
-	return n.core.poset.Store.RoundWitnesses(roundIndex)
+	return n.core.poset.Store().RoundWitnesses(roundIndex)
 }
 
 func (n *Node) GetRoundEvents(roundIndex int64) int {
-	return n.core.poset.Store.RoundEvents(roundIndex)
+	return n.core.poset.Store().RoundEvents(roundIndex)
 }
 
 func (n *Node) GetRoot(rootIndex string) (poset.Root, error) {
-	return n.core.poset.Store.GetRoot(rootIndex)
+	return n.core.poset.Store().GetRoot(rootIndex)
 }
 
 func (n *Node) GetBlock(blockIndex int64) (poset.Block, error) {
-	return n.core.poset.Store.GetBlock(blockIndex)
+	return n.core.poset.Store().GetBlock(blockIndex)
 }
 
 func (n *Node) ID() int64 {

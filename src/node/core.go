@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -14,6 +15,12 @@ import (
 	"github.com/Fantom-foundation/go-lachesis/src/peers"
 	"github.com/Fantom-foundation/go-lachesis/src/poset"
 )
+
+// MaxReceiveMessageSize limitation in grpc:
+// https://github.com/grpc/grpc-go/blob/master/clientconn.go#L96
+// default value is 4 * 1024 * 1024 bytes
+// we use transactions of 120 bytes in tester, thus rounding it down to 16384
+const maxTxInEvent = 16384
 
 type Core struct {
 	id     int64
@@ -28,13 +35,28 @@ type Core struct {
 	head         string
 	Seq          int64
 
-	transactionPool         [][]byte
-	internalTransactionPool []poset.InternalTransaction
-	blockSignaturePool      []poset.BlockSignature
+	txPool             *txPool
+	internalTxPool     *internalTxPool
+	blockSignaturePool *blockSigPool
 
 	logger *logrus.Entry
 
 	maxTransactionsInEvent int
+}
+
+type internalTxPool struct {
+	mtx  sync.Mutex
+	pool []*poset.InternalTransaction
+}
+
+type txPool struct {
+	mtx  sync.Mutex
+	pool [][]byte
+}
+
+type blockSigPool struct {
+	mtx  sync.Mutex
+	pool []*poset.BlockSignature
 }
 
 func NewCore(id int64, key *ecdsa.PrivateKey, participants *peers.Peers,
@@ -54,21 +76,18 @@ func NewCore(id int64, key *ecdsa.PrivateKey, participants *peers.Peers,
 
 	p2 := poset.NewPoset(participants, store, commitCh, logEntry)
 	core := &Core{
-		id:                      id,
-		key:                     key,
-		poset:                   p2,
-		inDegrees:               inDegrees,
-		participants:            participants,
-		transactionPool:         [][]byte{},
-		internalTransactionPool: []poset.InternalTransaction{},
-		blockSignaturePool:      []poset.BlockSignature{},
-		logger:                  logEntry,
-		head:                    "",
-		Seq:                     -1,
-		// MaxReceiveMessageSize limitation in grpc: https://github.com/grpc/grpc-go/blob/master/clientconn.go#L96
-		// default value is 4 * 1024 * 1024 bytes
-		// we use transactions of 120 bytes in tester, thus rounding it down to 16384
-		maxTransactionsInEvent: 16384,
+		id:                 id,
+		key:                key,
+		poset:              p2,
+		inDegrees:          inDegrees,
+		participants:       participants,
+		txPool:             &txPool{},
+		internalTxPool:     &internalTxPool{},
+		blockSignaturePool: &blockSigPool{},
+		logger:             logEntry,
+		head:               "",
+		Seq:                -1,
+		maxTransactionsInEvent: maxTxInEvent,
 	}
 
 	p2.SetCore(core)
@@ -76,8 +95,86 @@ func NewCore(id int64, key *ecdsa.PrivateKey, participants *peers.Peers,
 	return core
 }
 
+func (p *internalTxPool) add(txs []*poset.InternalTransaction) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.pool = append(p.pool, txs...)
+}
+
+func (p *internalTxPool) get() (txs []*poset.InternalTransaction) {
+	p.mtx.Lock()
+	txs = make([]*poset.InternalTransaction, len(p.pool))
+	copy(txs, p.pool)
+	p.mtx.Unlock()
+	return txs
+}
+
+func (p *internalTxPool) clean() {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.pool = nil
+}
+
+func (p *internalTxPool) len() int {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	return len(p.pool)
+}
+
+func (p *txPool) add(txs [][]byte) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.pool = append(p.pool, txs...)
+}
+
+func (p *txPool) get() (txs [][]byte) {
+	p.mtx.Lock()
+	txs = make([][]byte, len(p.pool))
+	copy(txs, p.pool)
+	p.mtx.Unlock()
+	return txs
+}
+
+func (p *txPool) len() int {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	return len(p.pool)
+}
+
+func (p *txPool) clean() {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.pool = nil
+}
+
 func (c *Core) ID() int64 {
 	return c.id
+}
+
+func (p *blockSigPool) add(bs []*poset.BlockSignature) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.pool = append(p.pool, bs...)
+}
+
+func (p *blockSigPool) get() (bs []*poset.BlockSignature) {
+	p.mtx.Lock()
+	bs = make([]*poset.BlockSignature, len(p.pool))
+	copy(bs, p.pool)
+	p.mtx.Unlock()
+	return bs
+}
+
+func (p *blockSigPool) clean() {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.pool = nil
+}
+
+func (p *blockSigPool) len() int {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	return len(p.pool)
 }
 
 func (c *Core) PubKey() []byte {
@@ -103,7 +200,7 @@ func (c *Core) Head() string {
 func (c *Core) Heights() map[string]uint64 {
 	heights := make(map[string]uint64)
 	for pubKey := range c.participants.ByPubKey {
-		participantEvents, err := c.poset.Store.ParticipantEvents(pubKey, -1)
+		participantEvents, err := c.poset.Store().ParticipantEvents(pubKey, -1)
 		if err == nil {
 			heights[pubKey] = uint64(len(participantEvents))
 		} else {
@@ -122,13 +219,13 @@ func (c *Core) SetHeadAndSeq() error {
 	var head string
 	var seq int64
 
-	last, isRoot, err := c.poset.Store.LastEventFrom(c.HexID())
+	last, isRoot, err := c.poset.Store().LastEventFrom(c.HexID())
 	if err != nil {
 		return err
 	}
 
 	if isRoot {
-		root, err := c.poset.Store.GetRoot(c.HexID())
+		root, err := c.poset.Store().GetRoot(c.HexID())
 		if err != nil {
 			return err
 		}
@@ -166,7 +263,7 @@ func (c *Core) Bootstrap() error {
 func (c *Core) bootstrapInDegrees() {
 	for pubKey := range c.participants.ByPubKey {
 		c.inDegrees[pubKey] = 0
-		eventHash, _, err := c.poset.Store.LastEventFrom(pubKey)
+		eventHash, _, err := c.poset.Store().LastEventFrom(pubKey)
 		if err != nil {
 			continue
 		}
@@ -174,12 +271,12 @@ func (c *Core) bootstrapInDegrees() {
 			if otherPubKey == pubKey {
 				continue
 			}
-			events, err := c.poset.Store.ParticipantEvents(otherPubKey, -1)
+			events, err := c.poset.Store().ParticipantEvents(otherPubKey, -1)
 			if err != nil {
 				continue
 			}
 			for _, eh := range events {
-				event, err := c.poset.Store.GetEvent(eh)
+				event, err := c.poset.Store().GetEvent(eh)
 				if err != nil {
 					continue
 				}
@@ -222,14 +319,14 @@ func (c *Core) InsertEvent(event poset.Event, setWireInfo bool) error {
 
 	c.inDegrees[event.Creator()] = 0
 
-	if otherEvent, err := c.poset.Store.GetEvent(event.OtherParent()); err == nil {
+	if otherEvent, err := c.poset.Store().GetEvent(event.OtherParent()); err == nil {
 		c.inDegrees[otherEvent.Creator()]++
 	}
 	return nil
 }
 
 func (c *Core) KnownEvents() map[int64]int64 {
-	return c.poset.Store.KnownEvents()
+	return c.poset.Store().KnownEvents()
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -242,7 +339,7 @@ func (c *Core) SignBlock(block poset.Block) (poset.BlockSignature, error) {
 	if err := block.SetSignature(sig); err != nil {
 		return poset.BlockSignature{}, err
 	}
-	return sig, c.poset.Store.SetBlock(block)
+	return sig, c.poset.Store().SetBlock(block)
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -279,12 +376,12 @@ func (c *Core) EventDiff(known map[int64]int64) (events []poset.Event, err error
 			continue
 		}
 		// get participant Events with index > ct
-		participantEvents, err := c.poset.Store.ParticipantEvents(peer.PubKeyHex, ct)
+		participantEvents, err := c.poset.Store().ParticipantEvents(peer.PubKeyHex, ct)
 		if err != nil {
 			return []poset.Event{}, err
 		}
 		for _, e := range participantEvents {
-			ev, err := c.poset.Store.GetEvent(e)
+			ev, err := c.poset.Store().GetEvent(e)
 			if err != nil {
 				return []poset.Event{}, err
 			}
@@ -306,11 +403,11 @@ func (c *Core) EventDiff(known map[int64]int64) (events []poset.Event, err error
 func (c *Core) Sync(unknownEvents []poset.WireEvent) error {
 
 	c.logger.WithFields(logrus.Fields{
-		"unknown_events":              len(unknownEvents),
-		"transaction_pool":            len(c.transactionPool),
-		"internal_transaction_pool":   len(c.internalTransactionPool),
-		"block_signature_pool":        len(c.blockSignaturePool),
-		"c.poset.PendingLoadedEvents": c.poset.PendingLoadedEvents,
+		"unknown_events":                 len(unknownEvents),
+		"transaction_pool":               c.txPool.len(),
+		"internal_transaction_pool":      c.internalTxPool.len(),
+		"block_signature_pool":           c.blockSignaturePool.len(),
+		"c.poset.GetPendingLoadedEvents": c.poset.GetPendingLoadedEvents(),
 	}).Debug("Sync(unknownEventBlocks []poset.EventBlock)")
 
 	myKnownEvents := c.KnownEvents()
@@ -340,10 +437,10 @@ func (c *Core) Sync(unknownEvents []poset.WireEvent) error {
 
 	// create new event with self head and other head only if there are pending
 	// loaded events or the pools are not empty
-	if c.poset.PendingLoadedEvents > 0 ||
-		len(c.transactionPool) > 0 ||
-		len(c.internalTransactionPool) > 0 ||
-		len(c.blockSignaturePool) > 0 {
+	if c.poset.GetPendingLoadedEvents() > 0 ||
+		c.txPool.len() > 0 ||
+		c.internalTxPool.len() > 0 ||
+		c.blockSignaturePool.len() > 0 {
 		return c.AddSelfEventBlock(otherHead)
 	}
 	return nil
@@ -394,11 +491,11 @@ func min(a, b int) int {
 func (c *Core) AddSelfEventBlock(otherHead string) error {
 
 	// Get flag tables from parents
-	parentEvent, errSelf := c.poset.Store.GetEvent(c.head)
+	parentEvent, errSelf := c.poset.Store().GetEvent(c.head)
 	if errSelf != nil {
 		c.logger.Warnf("failed to get parent: %s", errSelf)
 	}
-	otherParentEvent, errOther := c.poset.Store.GetEvent(otherHead)
+	otherParentEvent, errOther := c.poset.Store().GetEvent(otherHead)
 	if errOther != nil {
 		c.logger.Warnf("failed to get other parent: %s", errOther)
 	}
@@ -426,29 +523,29 @@ func (c *Core) AddSelfEventBlock(otherHead string) error {
 
 	// create new event with self head and empty other parent
 	// empty transaction pool in its payload
-	var batch [][]byte
-	nTxs := min(len(c.transactionPool), c.maxTransactionsInEvent)
-	batch = c.transactionPool[0:nTxs:nTxs]
-	newHead := poset.NewEvent(batch,
-		c.internalTransactionPool,
-		c.blockSignaturePool,
+	nTxs := min(c.txPool.len(), c.maxTransactionsInEvent)
+	newHead := poset.NewEvent(c.txPool.get()[:nTxs],
+		c.internalTxPool.get(),
+		c.blockSignaturePool.get(),
 		[]string{c.head, otherHead}, c.PubKey(), c.Seq+1, flagTable)
 
 	if err := c.SignAndInsertSelfEvent(newHead); err != nil {
 		return fmt.Errorf("newHead := poset.NewEventBlock: %s", err)
 	}
 	c.logger.WithFields(logrus.Fields{
-		"transactions":          len(c.transactionPool),
-		"internal_transactions": len(c.internalTransactionPool),
-		"block_signatures":      len(c.blockSignaturePool),
+		"transactions":          c.txPool.len(),
+		"internal_transactions": c.internalTxPool.len(),
+		"block_signatures":      c.blockSignaturePool.len(),
 	}).Debug("newHead := poset.NewEventBlock")
 
-	c.transactionPool = c.transactionPool[nTxs:] //[][]byte{}
-	c.internalTransactionPool = []poset.InternalTransaction{}
+	txPool := c.txPool.get()[nTxs:]
+	c.txPool.clean()
+	c.txPool.add(txPool)
+	c.internalTxPool.clean()
 	// retain c.blockSignaturePool until c.transactionPool is empty
 	// FIXIT: is there any better strategy?
-	if len(c.transactionPool) == 0 {
-		c.blockSignaturePool = []poset.BlockSignature{}
+	if c.txPool.len() == 0 {
+		c.blockSignaturePool.clean()
 	}
 
 	return nil
@@ -516,32 +613,32 @@ func (c *Core) RunConsensus() error {
 	}
 
 	c.logger.WithFields(logrus.Fields{
-		"transaction_pool":            len(c.transactionPool),
-		"block_signature_pool":        len(c.blockSignaturePool),
-		"c.poset.PendingLoadedEvents": c.poset.PendingLoadedEvents,
+		"transaction_pool":               c.txPool.len(),
+		"block_signature_pool":           c.blockSignaturePool.len(),
+		"c.poset.GetPendingLoadedEvents": c.poset.GetPendingLoadedEvents(),
 	}).Debug("c.RunConsensus()")
 
 	return nil
 }
 
 func (c *Core) AddTransactions(txs [][]byte) {
-	c.transactionPool = append(c.transactionPool, txs...)
+	c.txPool.add(txs)
 }
 
-func (c *Core) AddInternalTransactions(txs []poset.InternalTransaction) {
-	c.internalTransactionPool = append(c.internalTransactionPool, txs...)
+func (c *Core) AddInternalTransactions(txs []*poset.InternalTransaction) {
+	c.internalTxPool.add(txs)
 }
 
 func (c *Core) AddBlockSignature(bs poset.BlockSignature) {
-	c.blockSignaturePool = append(c.blockSignaturePool, bs)
+	c.blockSignaturePool.add([]*poset.BlockSignature{&bs})
 }
 
 func (c *Core) GetHead() (poset.Event, error) {
-	return c.poset.Store.GetEvent(c.head)
+	return c.poset.Store().GetEvent(c.head)
 }
 
 func (c *Core) GetEvent(hash string) (poset.Event, error) {
-	return c.poset.Store.GetEvent(hash)
+	return c.poset.Store().GetEvent(hash)
 }
 
 func (c *Core) GetEventTransactions(hash string) ([][]byte, error) {
@@ -555,19 +652,19 @@ func (c *Core) GetEventTransactions(hash string) ([][]byte, error) {
 }
 
 func (c *Core) GetConsensusEvents() []string {
-	return c.poset.Store.ConsensusEvents()
+	return c.poset.Store().ConsensusEvents()
 }
 
 func (c *Core) GetConsensusEventsCount() int64 {
-	return c.poset.Store.ConsensusEventsCount()
+	return c.poset.Store().ConsensusEventsCount()
 }
 
 func (c *Core) GetUndeterminedEvents() []string {
-	return c.poset.UndeterminedEvents
+	return c.poset.GetUndeterminedEvents()
 }
 
 func (c *Core) GetPendingLoadedEvents() int {
-	return c.poset.PendingLoadedEvents
+	return c.poset.GetPendingLoadedEvents()
 }
 
 func (c *Core) GetConsensusTransactions() ([][]byte, error) {
@@ -583,17 +680,13 @@ func (c *Core) GetConsensusTransactions() ([][]byte, error) {
 }
 
 func (c *Core) GetLastConsensusRoundIndex() *int64 {
-	return c.poset.LastConsensusRound
+	return c.poset.GetLastConsensusRound()
 }
 
 func (c *Core) GetConsensusTransactionsCount() uint64 {
-	return c.poset.ConsensusTransactions
-}
-
-func (c *Core) GetLastCommittedRoundEventsCount() int {
-	return c.poset.LastCommitedRoundEvents
+	return c.poset.GetConsensusTransactions()
 }
 
 func (c *Core) GetLastBlockIndex() int64 {
-	return c.poset.Store.LastBlockIndex()
+	return c.poset.Store().LastBlockIndex()
 }

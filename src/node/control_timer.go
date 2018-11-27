@@ -2,6 +2,7 @@ package node
 
 import (
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -9,11 +10,13 @@ type timerFactory func(time.Duration) <-chan time.Time
 
 type ControlTimer struct {
 	timerFactory timerFactory
-	tickCh       chan struct{} //sends a signal to listening process
+	tickCh       chan struct{}      //sends a signal to listening process
 	resetCh      chan time.Duration //receives instruction to reset the heartbeatTimer
-	stopCh       chan struct{} //receives instruction to stop the heartbeatTimer
-	shutdownCh   chan struct{} //receives instruction to exit Run loop
-	set          bool
+	stopCh       chan struct{}      //receives instruction to stop the heartbeatTimer
+	shutdownCh   chan struct{}      //receives instruction to exit Run loop
+
+	mtx sync.Mutex
+	set bool
 }
 
 func NewControlTimer(timerFactory timerFactory) *ControlTimer {
@@ -41,7 +44,9 @@ func NewRandomControlTimer() *ControlTimer {
 func (c *ControlTimer) Run(init time.Duration) {
 
 	setTimer := func(t time.Duration) <-chan time.Time {
+		c.mtx.Lock()
 		c.set = true
+		c.mtx.Unlock()
 		return c.timerFactory(t)
 	}
 
@@ -50,14 +55,20 @@ func (c *ControlTimer) Run(init time.Duration) {
 		select {
 		case <-timer:
 			c.tickCh <- struct{}{}
+			c.mtx.Lock()
 			c.set = false
-		case t:= <-c.resetCh:
+			c.mtx.Unlock()
+		case t := <-c.resetCh:
 			timer = setTimer(t)
 		case <-c.stopCh:
 			timer = nil
+			c.mtx.Lock()
 			c.set = false
+			c.mtx.Unlock()
 		case <-c.shutdownCh:
+			c.mtx.Lock()
 			c.set = false
+			c.mtx.Unlock()
 			return
 		}
 	}
@@ -65,4 +76,10 @@ func (c *ControlTimer) Run(init time.Duration) {
 
 func (c *ControlTimer) Shutdown() {
 	close(c.shutdownCh)
+}
+
+func (c *ControlTimer) IsSet() bool {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	return c.set
 }

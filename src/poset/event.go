@@ -121,16 +121,17 @@ type Event struct {
 	Message EventMessage
 
 	//used for sorting
-	round           		*int64
-	lamportTimestamp		*int64
-	roundReceived			*int64
-	creator					string
-	hash					[]byte
-	hex						string
+	round                *int64
+	lamportTimestamp     *int64
+	roundReceived        *int64
+
+	creator              string
+	hash                 []byte
+	hex                  string
 }
 
 func (e EventMessage) ToEvent() Event {
-	return Event {
+	return Event{
 		Message: e,
 	}
 }
@@ -144,34 +145,24 @@ func (this *EventMessage) Equals(that *EventMessage) bool {
 
 // NewEvent creates new block event.
 func NewEvent(transactions [][]byte,
-	internalTransactions []InternalTransaction,
-	blockSignatures []BlockSignature,
+	internalTransactions []*InternalTransaction,
+	blockSignatures []*BlockSignature,
 	parents []string, creator []byte, index int64,
 	flagTable map[string]int64) Event {
 
-	internalTransactionPointers := make([]*InternalTransaction, len(internalTransactions))
-	for i, v := range internalTransactions {
-		internalTransactionPointers[i] = new(InternalTransaction)
-		*internalTransactionPointers[i] = v
-	}
-	blockSignaturePointers := make([]*BlockSignature, len(blockSignatures))
-	for i, v := range blockSignatures {
-		blockSignaturePointers[i] = new(BlockSignature)
-		*blockSignaturePointers[i] = v
-	}
 	body := EventBody{
 		Transactions:         transactions,
-		InternalTransactions: internalTransactionPointers,
-		BlockSignatures:      blockSignaturePointers,
+		InternalTransactions: internalTransactions,
+		BlockSignatures:      blockSignatures,
 		Parents:              parents,
 		Creator:              creator,
 		Index:                index,
 	}
 
-	ft, _ := proto.Marshal(&FlagTableWrapper { Body: flagTable })
+	ft, _ := proto.Marshal(&FlagTableWrapper{Body: flagTable})
 
 	return Event{
-		Message: EventMessage {
+		Message: EventMessage{
 			Body:      &body,
 			FlagTable: ft,
 		},
@@ -357,7 +348,7 @@ func (e *Event) ToWire() WireEvent {
 
 // ReplaceFlagTable replaces flag table.
 func (e *Event) ReplaceFlagTable(flagTable map[string]int64) (err error) {
-	e.Message.FlagTable, err = proto.Marshal(&FlagTableWrapper { Body: flagTable })
+	e.Message.FlagTable, err = proto.Marshal(&FlagTableWrapper{Body: flagTable})
 	return err
 }
 

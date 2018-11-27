@@ -183,6 +183,12 @@ func (b *Block) SetSignature(bs BlockSignature) error {
 	return nil
 }
 
+func (b *Block) Copy() *Block {
+	block := &Block{}
+	*block = *b
+	return block
+}
+
 func (b *Block) Verify(sig BlockSignature) (bool, error) {
 	signBytes, err := b.Body.Hash()
 	if err != nil {
@@ -210,7 +216,6 @@ func ListBytesEquals(this [][]byte, that [][]byte) bool {
 	}
 	return true
 }
-
 
 func (this *BlockBody) Equals(that *BlockBody) bool {
 	return this.Index == that.Index &&
