@@ -405,7 +405,10 @@ func (p *Poset) round2(x string) (int64, error) {
 			}
 
 			if opRound > parentRound {
-				// if in a flag table there are witnesses of the current round, then
+				var (
+					found           bool
+					seeOpRoundRoots int64
+				) // if in a flag table there are witnesses of the current round, then
 				// current round is other parent round.
 				ws := p.Store.RoundWitnesses(opRound)
 				ft, _ := ex.GetFlagTable()
@@ -418,11 +421,22 @@ func (p *Poset) round2(x string) (int64, error) {
 							}
 
 							if see {
-								return opRound, nil
+								if !found {
+									found = true
+								}
+								seeOpRoundRoots++
 							}
 						}
 					}
 				}
+
+				if seeOpRoundRoots >= int64(p.superMajority) {
+					return opRound + 1, nil
+				}
+				if found {
+					return opRound, nil
+				}
+
 				parentRound = opRound
 			}
 		}
