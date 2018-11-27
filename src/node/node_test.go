@@ -654,8 +654,8 @@ func TestShutdown(t *testing.T) {
 
 	nodes[0].Shutdown()
 
-	peer := peers.ByPubKey[nodes[0].core.hexID]
-	err := nodes[1].gossip([]*peers_.Peer{peer}, nil)
+	peer := ps.ByPubKey[nodes[0].core.hexID]
+	err := nodes[1].gossip([]*peers.Peer{peer}, nil)
 	if err == nil {
 		t.Fatal("Expected Timeout Error")
 	}
