@@ -359,7 +359,7 @@ func (p *Poset) round2(x string) (int64, error) {
 	*/
 	if ex.SelfParent() == root.SelfParent.Hash {
 		// Root is authoritative EXCEPT if other-parent is not in the root
-		if len(ex.OtherParents()) == 0 {
+		if len(ex.OtherParents()) == 0 || (len(ex.OtherParents()) == 1 && ex.OtherParent(0) == "") {
 			return root.NextRound, nil
 		} else if rootEvents, ok := root.Others[ex.Hex()]; ok {
 			for _, rootEvent := range rootEvents.Value {
@@ -773,7 +773,7 @@ func (p *Poset) createRoot(ev Event) (Root, error) {
 		OtherParent
 	*/
 	var otherParentsRootEvents []*RootEvent
-	if len(ev.OtherParents()) > 0 {
+	if len(ev.OtherParents()) != 0 && ev.OtherParent(0) != "" {
 		otherParentsRootEvents, err = p.createOtherParentsRootEvents(ev)
 		if err != nil {
 			return Root{}, err
