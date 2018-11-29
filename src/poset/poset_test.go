@@ -567,7 +567,7 @@ func TestInsertEvent(t *testing.T) {
 		}
 
 		if !(e0Event.Message.SelfParentIndex == -1 &&
-			e0Event.Message.otherParentCreatorIDs[0] == -1 &&
+			e0Event.Message.OtherParentCreatorIDs[0] == -1 &&
 			e0Event.Message.OtherParentIndexes[0] == -1 &&
 			e0Event.Message.CreatorID == p.Participants.ByPubKey[e0Event.Creator()].ID) {
 			t.Fatalf("Invalid wire info on %s", e0)
@@ -584,8 +584,8 @@ func TestInsertEvent(t *testing.T) {
 		}
 
 		if !(e21Event.Message.SelfParentIndex == 1 &&
-			e21Event.Message.otherParentCreatorIDs[0] == p.Participants.ByPubKey[e10Event.Creator()].ID &&
-			e21Event.Message.otherParentIndexes[0] == 1 &&
+			e21Event.Message.OtherParentCreatorIDs[0] == p.Participants.ByPubKey[e10Event.Creator()].ID &&
+			e21Event.Message.OtherParentIndexes[0] == 1 &&
 			e21Event.Message.CreatorID == p.Participants.ByPubKey[e21Event.Creator()].ID) {
 			t.Fatalf("Invalid wire info on %s", e21)
 		}
@@ -596,8 +596,8 @@ func TestInsertEvent(t *testing.T) {
 		}
 
 		if !(f1Event.Message.SelfParentIndex == 2 &&
-			f1Event.Message.otherParentCreatorIDs[0] == p.Participants.ByPubKey[e0Event.Creator()].ID &&
-			f1Event.Message.otherParentIndexes[0] == 2 &&
+			f1Event.Message.OtherParentCreatorIDs[0] == p.Participants.ByPubKey[e0Event.Creator()].ID &&
+			f1Event.Message.OtherParentIndexes[0] == 2 &&
 			f1Event.Message.CreatorID == p.Participants.ByPubKey[f1Event.Creator()].ID) {
 			t.Fatalf("Invalid wire info on %s", f1)
 		}
