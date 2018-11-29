@@ -48,6 +48,8 @@ type Node struct {
 	syncErrors   int
 
 	needBoostrap bool
+	gossipJobs   count64
+	rpcJobs      count64
 }
 
 func NewNode(conf *Config,
@@ -67,7 +69,8 @@ func NewNode(conf *Config,
 
 	pubKey := core.HexID()
 
-	peerSelector := NewRandomPeerSelector(participants, pubKey)
+	peerSelector := NewSmartPeerSelector(participants, pubKey,
+		core.poset.GetFlagTableOfRandomUndeterminedEvent)
 
 	node := Node{
 		id:               id,
@@ -85,6 +88,8 @@ func NewNode(conf *Config,
 		shutdownCh:       make(chan struct{}),
 		controlTimer:     NewRandomControlTimer(),
 		start:            time.Now(),
+		gossipJobs:       0,
+		rpcJobs:          0,
 	}
 
 	node.logger.WithField("peers", pmap).Debug("pmap")
@@ -199,16 +204,23 @@ func (n *Node) lachesis(gossip bool) {
 		select {
 		case rpc := <-n.netCh:
 			n.goFunc(func() {
+				n.rpcJobs.increment()
 				n.logger.Debug("Processing RPC")
 				n.processRPC(rpc)
 				n.resetTimer()
+				n.rpcJobs.decrement()
 			})
 		case <-n.controlTimer.tickCh:
-			if gossip {
-				n.logger.Debug("Gossip")
+			if gossip && n.gossipJobs.get() < 1 {
 				peersSlice := n.peerSelector.NextN(1)
-				n.goFunc(func() { n.gossip(peersSlice, returnCh) })
+				n.goFunc(func() {
+					n.gossipJobs.increment()
+					n.gossip(peersSlice, returnCh)
+					n.gossipJobs.decrement()
+				})
+				n.logger.Debug("Gossip")
 			}
+			n.logStats()
 			n.resetTimer()
 		case <-returnCh:
 			return
@@ -397,8 +409,6 @@ func (n *Node) gossip(peersSlice []*peers.Peer, parentReturnCh chan struct{}) er
 
 	// update peer selector
 	n.peerSelector.UpdateLastN(peersSlice)
-
-	n.logStats()
 
 	return nil
 }
@@ -628,7 +638,7 @@ func (n *Node) commit(block poset.Block) error {
 		// this requires a 1:1 relationship with nodes and clients
 		// multiple nodes can't read from the same client
 
-		block.Body.StateHash = stateHash
+		block.StateHash = stateHash
 		n.coreLock.Lock()
 		defer n.coreLock.Unlock()
 		sig, err := n.core.SignBlock(block)
@@ -739,6 +749,9 @@ func (n *Node) logStats() {
 		"round_events":           stats["round_events"],
 		"id":                     stats["id"],
 		"state":                  stats["state"],
+		"z_gossipJobs":           n.gossipJobs.get(),
+		"z_rpcJobs":              n.rpcJobs.get(),
+		"addr":                   n.localAddr,
 	}).Warn("logStats()")
 }
 

@@ -121,21 +121,16 @@ type Event struct {
 	Message EventMessage
 
 	// used for sorting
-	round           		*int64
-	lamportTimestamp		*int64
-	roundReceived			*int64
-	selfParentIndex			int64
-	otherParentCreatorIDs	[]int64
-	otherParentIndexes		[]int64
-	creatorID				int64
-	topologicalIndex		int64
-	creator					string
-	hash					[]byte
-	hex						string
+	round            *int64
+	lamportTimestamp *int64
+	roundReceived    *int64
+	creator          string
+	hash             []byte
+	hex              string
 }
 
 func (e EventMessage) ToEvent() Event {
-	return Event {
+	return Event{
 		Message: e,
 	}
 }
@@ -173,10 +168,10 @@ func NewEvent(transactions [][]byte,
 		Index:                index,
 	}
 
-	ft, _ := proto.Marshal(&FlagTableWrapper { Body: flagTable })
+	ft, _ := proto.Marshal(&FlagTableWrapper{Body: flagTable})
 
 	return Event{
-		Message: EventMessage {
+		Message: EventMessage{
 			Body:      &body,
 			FlagTable: ft,
 		},
@@ -332,10 +327,10 @@ func (e *Event) SetWireInfo(selfParentIndex int64,
 	otherParentCreatorIDs []int64,
 	otherParentIndexes []int64,
 	creatorID int64) {
-	e.selfParentIndex = selfParentIndex
-	e.otherParentCreatorIDs = otherParentCreatorIDs
-	e.otherParentIndexes = otherParentIndexes
-	e.creatorID = creatorID
+	e.Message.SelfParentIndex = selfParentIndex
+	e.Message.OtherParentCreatorIDs = otherParentCreatorIDs
+	e.Message.OtherParentIndexes = otherParentIndexes
+	e.Message.CreatorID = creatorID
 }
 
 func (e *Event) WireBlockSignatures() []WireBlockSignature {
@@ -360,10 +355,10 @@ func (e *Event) ToWire() WireEvent {
 		Body: WireBody{
 			Transactions:          e.Message.Body.Transactions,
 			InternalTransactions:  transactions,
-			SelfParentIndex:       e.selfParentIndex,
-			OtherParentCreatorIDs: e.otherParentCreatorIDs,
-			OtherParentIndexes:    e.otherParentIndexes,
-			CreatorID:             e.creatorID,
+			SelfParentIndex:       e.Message.SelfParentIndex,
+			OtherParentCreatorIDs: e.Message.OtherParentCreatorIDs,
+			OtherParentIndexes:    e.Message.OtherParentIndexes,
+			CreatorID:             e.Message.CreatorID,
 			Index:                 e.Message.Body.Index,
 			BlockSignatures:       e.WireBlockSignatures(),
 		},
@@ -375,7 +370,7 @@ func (e *Event) ToWire() WireEvent {
 
 // ReplaceFlagTable replaces flag table.
 func (e *Event) ReplaceFlagTable(flagTable map[string]int64) (err error) {
-	e.Message.FlagTable, err = proto.Marshal(&FlagTableWrapper { Body: flagTable })
+	e.Message.FlagTable, err = proto.Marshal(&FlagTableWrapper{Body: flagTable})
 	return err
 }
 
@@ -403,7 +398,11 @@ func (e *Event) MergeFlagTable(
 }
 
 func (e *Event) CreatorID() int64 {
-	return e.creatorID
+	return e.Message.CreatorID
+}
+
+func (e *Event) OtherParentCreatorID() []int64 {
+	return e.Message.OtherParentCreatorIDs
 }
 
 func rootSelfParent(participantID int64) string {
@@ -422,7 +421,7 @@ type ByTopologicalOrder []Event
 func (a ByTopologicalOrder) Len() int      { return len(a) }
 func (a ByTopologicalOrder) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a ByTopologicalOrder) Less(i, j int) bool {
-	return a[i].topologicalIndex < a[j].topologicalIndex
+	return a[i].Message.TopologicalIndex < a[j].Message.TopologicalIndex
 }
 
 // ByLamportTimestamp implements sort.Interface for []Event based on

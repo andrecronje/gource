@@ -1,10 +1,10 @@
-hash: 19626b09537db430cba02c95d580afd0d6444dd0f82dfaf21c8b907f7705df2f
-updated: 2018-11-14T11:33:27.639975236+11:00
+hash: e72ad995126b9c4187b2503f304edf7512945cd3abb072cc17e38cc58d806cc4
+updated: 2018-11-29T12:53:06.206043366+07:00
 imports:
 - name: github.com/AndreasBriese/bbloom
   version: 343706a395b76e5ca5c7dca46a5d937b48febc74
 - name: github.com/btcsuite/btcd
-  version: 67e573d211ace594f1366b4ce9d39726c4b19bd0
+  version: 3dcf298fed2d5fd65918dc560b3942b2aa0629e8
   subpackages:
   - peer
 - name: github.com/dgraph-io/badger
@@ -24,7 +24,7 @@ imports:
 - name: github.com/go-chi/chi
   version: b5294d10673813fac8558e7f47242bc9e61b4c25
 - name: github.com/golang/protobuf
-  version: d3de96c4c28ef8af3aa1a892fc481e0f103c01ff
+  version: 1d3f30b51784bec5aad268e59fd3c2fc1c2fe73f
   subpackages:
   - proto
   - ptypes
@@ -33,6 +33,10 @@ imports:
   - ptypes/timestamp
 - name: github.com/gorilla/websocket
   version: 66b9c49e59c6c48f0ffce28c2d8b8a5678502c6d
+- name: github.com/hashicorp/golang-lru
+  version: 20f1fb78b0740ba8c3cb143a61e86ba5c8669768
+  subpackages:
+  - simplelru
 - name: github.com/hashicorp/hcl
   version: 65a6292f0157eff210d03ed1bf6c59b190b8b906
   subpackages:
@@ -50,11 +54,11 @@ imports:
 - name: github.com/konsorten/go-windows-terminal-sequences
   version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
 - name: github.com/magiconair/properties
-  version: c2353362d570a7bfa228149c62842019201cfb71
+  version: 7c38529aac7222391b7a2661365177a97e21b998
 - name: github.com/mitchellh/mapstructure
   version: 3536a929edddb9a5b34bd6861dc4a9647cb459fe
 - name: github.com/pelletier/go-toml
-  version: 81a861c69d25a841d0c4394f0e6f84bc8c5afae0
+  version: 27c6b39a135b7dc87a14afb068809132fb7a9a8f
 - name: github.com/pkg/errors
   version: 059132a15dd08d6704c67711dae0cf35ab991756
 - name: github.com/rifflock/lfshook
@@ -76,7 +80,7 @@ imports:
 - name: github.com/spf13/jwalterweatherman
   version: 94f6ae3ed3bceceafa716478c5fbf8d29ca601a1
 - name: github.com/spf13/pflag
-  version: 082b515c9490f4eccc758469c3152b77d139f868
+  version: aea12ed6721610dc6ed40141676d7ab0a1dac9e9
 - name: github.com/spf13/viper
   version: 2c12c60302a5a0e62ee102ca9bc996277c2f64f5
 - name: github.com/stretchr/testify
@@ -92,11 +96,11 @@ imports:
 - name: github.com/urfave/cli
   version: cfb38830724cc34fedffe9a2a29fb54fa9169cd1
 - name: golang.org/x/crypto
-  version: 45a5f77698d342a8c2ef8423abdf0ba6880b008a
+  version: eb0de9b17e854e9b1ccd9963efafc79862359959
   subpackages:
   - ssh/terminal
 - name: golang.org/x/net
-  version: c44066c5c816ec500d459a2a324a753f78531ae0
+  version: adae6a3d119ae4890b46832a2e88a95adc62b8e7
   subpackages:
   - context
   - http/httpguts
@@ -106,19 +110,19 @@ imports:
   - internal/timeseries
   - trace
 - name: golang.org/x/sys
-  version: 95b1ffbd15a57cc5abb3f04402b9e8ec0016a52c
+  version: 4ed8d59d0b35e1e29334a206d1b3f38b1e5dfb31
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 4d1c5fb19474adfe9562c9847ba425e7da817e81
+  version: 6f44c5a2ea40ee3593d98cdcc905cc1fdaa660e2
   subpackages:
   - secure/bidirule
   - transform
   - unicode/bidi
   - unicode/norm
 - name: google.golang.org/genproto
-  version: c830210a61dfaa790e1920f8d0470fc27bc2efbe
+  version: 31ac5d88444a9e7ad18077db9a165d793ad06a2e
   subpackages:
   - googleapis/rpc/status
 - name: google.golang.org/grpc
