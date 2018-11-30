@@ -388,15 +388,13 @@ func (n *Node) gossip(peersSlice []*peers.Peer, parentReturnCh chan struct{}) er
 		eventsCount += len(events)
 	}
 
-	if eventsCount > 0 {
-		// Add Events to poset and create new Head if necessary
-		n.coreLock.Lock()
-		err = n.sync(allEvents)
-		n.coreLock.Unlock()
-		if err != nil {
-			n.logger.WithField("error", err).Error("n.sync(resp.Events)")
-			return err
-		}
+	// Add Events to poset and create new Head if necessary
+	n.coreLock.Lock()
+	err = n.sync(allEvents)
+	n.coreLock.Unlock()
+	if err != nil {
+		n.logger.WithField("error", err).Error("n.sync(resp.Events)")
+		return err
 	}
 
 	// push
