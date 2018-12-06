@@ -1443,16 +1443,17 @@ func (p *Poset) GetFrame(roundReceived int64) (Frame, error) {
 	eventMessages := make([]*EventMessage, len(events))
 	for i, ev := range events {
 		treated[ev.Hex()] = true
-		otherParent := ev.OtherParent(0)
-		if otherParent != "" {
-			opt, ok := treated[otherParent]
-			if !opt || !ok {
-				if ev.SelfParent() != roots[ev.Creator()].SelfParent.Hash {
-					other, err := p.createOtherParentsRootEvents(ev)
-					if err != nil {
-						return Frame{}, err
+		for _, otherParent := range ev.OtherParents() {
+			if otherParent != "" {
+				opt, ok := treated[otherParent]
+				if !opt || !ok {
+					if ev.SelfParent() != roots[ev.Creator()].SelfParent.Hash {
+						other, err := p.createOtherParentsRootEvents(ev)
+						if err != nil {
+							return Frame{}, err
+						}
+						roots[ev.Creator()].Others[ev.Hex()] = &RootEvents{Value: other}
 					}
-					roots[ev.Creator()].Others[ev.Hex()] = &RootEvents{Value: other}
 				}
 			}
 		}
