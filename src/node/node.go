@@ -212,7 +212,7 @@ func (n *Node) lachesis(gossip bool) {
 			})
 		case <-n.controlTimer.tickCh:
 			if gossip && n.gossipJobs.get() < 1 {
-				peersSlice := n.peerSelector.NextN(1)
+				peersSlice := n.peerSelector.NextN(n.conf.PeersCount)
 				n.goFunc(func() {
 					n.gossipJobs.increment()
 					n.gossip(peersSlice, returnCh)
