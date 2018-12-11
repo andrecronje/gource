@@ -17,7 +17,7 @@ import (
 )
 
 type Node struct {
-	nodeState
+	state *nodeState2
 
 	conf   *Config
 	logger *logrus.Entry
@@ -98,7 +98,8 @@ func NewNode(conf *Config,
 	node.needBoostrap = store.NeedBoostrap()
 
 	// Initialize
-	node.setState(Gossiping)
+	node.state = newNodeState2() // TODO: hardcoded timeout
+	node.state.setState(Gossiping)
 
 	return &node
 }
@@ -141,7 +142,7 @@ func (n *Node) Run(gossip bool) {
 	// Execute Node State Machine
 	for {
 		// Run different routines depending on node state
-		state := n.getState()
+		state := n.state.getState()
 		n.logger.WithField("state", state.String()).Debug("RunAsync(gossip bool)")
 
 		switch state {
@@ -204,7 +205,7 @@ func (n *Node) lachesis(gossip bool) {
 	for {
 		select {
 		case rpc := <-n.netCh:
-			n.goFunc(func() {
+			n.state.goFunc(func() {
 				n.rpcJobs.increment()
 				n.logger.Debug("Processing RPC")
 				n.processRPC(rpc)
@@ -214,7 +215,7 @@ func (n *Node) lachesis(gossip bool) {
 		case <-n.controlTimer.tickCh:
 			if gossip && n.gossipJobs.get() < 1 {
 				peer := n.peerSelector.Next()
-				n.goFunc(func() {
+				n.state.goFunc(func() {
 					n.gossipJobs.increment()
 					n.gossip(peer.NetAddr, returnCh)
 					n.gossipJobs.decrement()
@@ -375,8 +376,8 @@ func (n *Node) gossip(peerAddr string, parentReturnCh chan struct{}) error {
 	// check and handle syncLimit
 	if syncLimit {
 		n.logger.WithField("from", peerAddr).Debug("SyncLimit")
-		n.setState(CatchingUp)
-		parentReturnCh <- struct{}{}
+		n.state.setState(CatchingUp)
+		close(parentReturnCh)
 		return nil
 	}
 
@@ -489,7 +490,7 @@ func (n *Node) fastForward() error {
 	n.logger.Debug("fastForward()")
 
 	// wait until sync routines finish
-	n.waitRoutines()
+	n.state.waitRoutines()
 
 	// fastForwardRequest
 	peer := n.peerSelector.Next()
@@ -526,7 +527,7 @@ func (n *Node) fastForward() error {
 		return err
 	}
 
-	n.setState(Gossiping)
+	n.state.setState(Gossiping)
 
 	return nil
 }
@@ -652,26 +653,28 @@ func (n *Node) addInternalTransaction(tx *poset.InternalTransaction) {
 }
 
 func (n *Node) Shutdown() {
-	if n.getState() != Shutdown {
-		// n.mqtt.FireEvent("Shutdown()", "/mq/lachesis/node")
-		n.logger.Debug("Shutdown()")
-
-		// Exit any non-shutdown state immediately
-		n.setState(Shutdown)
-
-		// Stop and wait for concurrent operations
-		close(n.shutdownCh)
-		n.waitRoutines()
-
-		// For some reason this needs to be called after closing the shutdownCh
-		// Not entirely sure why...
-		n.controlTimer.Shutdown()
-
-		// transport and store should only be closed once all concurrent operations
-		// are finished otherwise they will panic trying to use close objects
-		n.trans.Close()
-		n.core.poset.Store().Close()
+	if n.state.getState() == Shutdown {
+		return
 	}
+
+	// n.mqtt.FireEvent("Shutdown()", "/mq/lachesis/node")
+	n.logger.Debug("Shutdown()")
+
+	// Exit any non-shutdown state immediately
+	n.state.setState(Shutdown)
+
+	// Stop and wait for concurrent operations
+	close(n.shutdownCh)
+	n.state.waitRoutines()
+
+	// For some reason this needs to be called after closing the shutdownCh
+	// Not entirely sure why...
+	n.controlTimer.Shutdown()
+
+	// transport and store should only be closed once all concurrent operations
+	// are finished otherwise they will panic trying to use close objects
+	n.trans.Close()
+	n.core.poset.Store().Close()
 }
 
 func (n *Node) GetStats() map[string]string {
@@ -713,7 +716,7 @@ func (n *Node) GetStats() map[string]string {
 		"events_per_second":       strconv.FormatFloat(consensusEventsPerSecond, 'f', 2, 64),
 		"rounds_per_second":       strconv.FormatFloat(consensusRoundsPerSecond, 'f', 2, 64),
 		"id":                      strconv.FormatInt(n.id, 10),
-		"state":                   n.getState().String(),
+		"state":                   n.state.getState().String(),
 	}
 	// n.mqtt.FireEvent(s, "/mq/lachesis/stats")
 	return s

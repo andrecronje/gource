@@ -2,6 +2,7 @@ package dummy
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 
@@ -23,6 +24,7 @@ type State struct {
 	logger       *logrus.Logger
 	committedTxs [][]byte
 	stateHash    []byte
+	mtx          sync.RWMutex
 	snapshots    map[int64][]byte
 }
 
@@ -56,6 +58,8 @@ func (s *State) CommitHandler(block poset.Block) ([]byte, error) {
 func (s *State) SnapshotHandler(blockIndex int64) ([]byte, error) {
 	s.logger.WithField("block", blockIndex).Debug("GetSnapshot")
 
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
 	snapshot, ok := s.snapshots[blockIndex]
 	if !ok {
 		return nil, fmt.Errorf("snapshot %d not found", blockIndex)
@@ -86,7 +90,9 @@ func (s *State) commit(block poset.Block) error {
 		s.logger.Info(string(tx))
 		hash = crypto.SimpleHashFromTwoHashes(hash, crypto.SHA256(tx))
 	}
+	s.mtx.Lock()
 	s.snapshots[block.Index()] = hash
+	s.mtx.Unlock()
 	s.stateHash = hash
 	return nil
 }

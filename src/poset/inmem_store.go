@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 
 	cm "github.com/Fantom-foundation/go-lachesis/src/common"
 	"github.com/Fantom-foundation/go-lachesis/src/peers"
@@ -19,12 +20,19 @@ type InmemStore struct {
 	frameCache             *lru.Cache
 	consensusCache         *cm.RollingIndex
 	participantEventsCache *ParticipantEventsCache
-	totConsensusEvents     *intHolder
-	lastRound              *intHolder
-	lastBlock              *intHolder
-	rootsByParticipant     map[string]Root   //[participant] => Root
-	rootsBySelfParent      map[string]Root   //[Root.SelfParent.Hash] => Root
-	lastConsensusEvents    map[string]string //[participant] => hex() of last consensus event
+
+	totConsensusEventsMtx sync.RWMutex
+	totConsensusEvents    int64
+
+	lastRoundMtx sync.RWMutex
+	lastRound    int64
+
+	lastBlockMtx sync.RWMutex
+	lastBlock    int64
+
+	rootsByParticipant  map[string]Root   //[participant] => Root
+	rootsBySelfParent   map[string]Root   //[Root.SelfParent.Hash] => Root
+	lastConsensusEvents map[string]string //[participant] => hex() of last consensus event
 }
 
 func NewInmemStore(participants *peers.Peers, cacheSize int) *InmemStore {
@@ -69,9 +77,9 @@ func NewInmemStore(participants *peers.Peers, cacheSize int) *InmemStore {
 			cacheSize, participants),
 		rootsByParticipant:  rootsByParticipant,
 		lastConsensusEvents: map[string]string{},
-		totConsensusEvents:  newIntHolder(0),
-		lastRound:           newIntHolder(-1),
-		lastBlock:           newIntHolder(-1),
+		totConsensusEvents:  0,
+		lastRound:           -1,
+		lastBlock:           -1,
 	}
 
 	participants.OnNewPeer(func(peer *peers.Peer) {
@@ -85,38 +93,6 @@ func NewInmemStore(participants *peers.Peers, cacheSize int) *InmemStore {
 		store.participantEventsCache.Import(old)
 	})
 	return store
-}
-
-type intHolder struct {
-	setChan chan int64
-	getChan chan int64
-}
-
-func newIntHolder(v int64) *intHolder {
-	h := &intHolder{
-		setChan: make(chan int64),
-		getChan: make(chan int64),
-	}
-	go h.mux(v)
-	return h
-}
-
-func (h *intHolder) mux(v int64) {
-	value := v
-	for {
-		select {
-		case value = <-h.setChan:
-		case h.getChan <- value:
-		}
-	}
-}
-
-func (h *intHolder) get() int64 {
-	return <-h.getChan
-}
-
-func (h *intHolder) set(i int64) {
-	h.setChan <- i
 }
 
 func (s *InmemStore) CacheSize() int {
@@ -251,14 +227,22 @@ func (s *InmemStore) ConsensusEvents() []string {
 }
 
 func (s *InmemStore) ConsensusEventsCount() int64 {
-	return s.totConsensusEvents.get()
+	s.totConsensusEventsMtx.RLock()
+	defer s.totConsensusEventsMtx.RUnlock()
+	return s.totConsensusEvents
+}
+
+func (s *InmemStore) setConsensusEventsCount(count int64) {
+	s.totConsensusEventsMtx.Lock()
+	defer s.totConsensusEventsMtx.Unlock()
+	s.totConsensusEvents = count
 }
 
 func (s *InmemStore) AddConsensusEvent(event Event) error {
-	totConsensusEvents := s.totConsensusEvents.get()
+	totConsensusEvents := s.ConsensusEventsCount()
 	s.consensusCache.Set(event.Hex(), totConsensusEvents)
 	totConsensusEvents++
-	s.totConsensusEvents.set(totConsensusEvents)
+	s.setConsensusEventsCount(totConsensusEvents)
 	s.lastConsensusEvents[event.Creator()] = event.Hex()
 	return nil
 }
@@ -274,14 +258,18 @@ func (s *InmemStore) GetRound(r int64) (RoundInfo, error) {
 
 func (s *InmemStore) SetRound(r int64, round RoundInfo) error {
 	s.roundCache.Add(r, round)
-	if r > s.lastRound.get() {
-		s.lastRound.set(r)
+	if r > s.LastRound() {
+		s.lastRoundMtx.Lock()
+		s.lastRound = r
+		s.lastRoundMtx.Unlock()
 	}
 	return nil
 }
 
 func (s *InmemStore) LastRound() int64 {
-	return s.lastRound.get()
+	s.lastRoundMtx.RLock()
+	defer s.lastRoundMtx.RUnlock()
+	return s.lastRound
 }
 
 func (s *InmemStore) RoundWitnesses(r int64) []string {
@@ -323,14 +311,22 @@ func (s *InmemStore) SetBlock(block Block) error {
 		return err
 	}
 	s.blockCache.Add(index, block)
-	if index > s.lastBlock.get() {
-		s.lastBlock.set(index)
+	if index > s.LastBlockIndex() {
+		s.setLastBlockIndex(index)
 	}
 	return nil
 }
 
 func (s *InmemStore) LastBlockIndex() int64 {
-	return s.lastBlock.get()
+	s.lastBlockMtx.RLock()
+	defer s.lastBlockMtx.RUnlock()
+	return s.lastBlock
+}
+
+func (s *InmemStore) setLastBlockIndex(index int64) {
+	s.lastBlockMtx.Lock()
+	defer s.lastBlockMtx.Unlock()
+	s.lastBlock = index
 }
 
 func (s *InmemStore) GetFrame(index int64) (Frame, error) {
@@ -371,8 +367,10 @@ func (s *InmemStore) Reset(roots map[string]Root) error {
 	s.roundCache = roundCache
 	s.consensusCache = cm.NewRollingIndex("ConsensusCache", s.cacheSize)
 	err := s.participantEventsCache.Reset()
-	s.lastRound.set(-1)
-	s.lastBlock.set(-1)
+	s.lastRoundMtx.Lock()
+	s.lastRound = -1
+	s.lastRoundMtx.Unlock()
+	s.setLastBlockIndex(-1)
 
 	if _, err := s.RootsBySelfParent(); err != nil {
 		return err

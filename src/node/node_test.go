@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -429,7 +432,7 @@ func TestGossip(t *testing.T) {
 
 	target := int64(50)
 
-	err := gossip(nodes, target, true, 3000*time.Second)
+	err := gossip(nodes, target, true, 3*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +508,7 @@ func TestFastForward(t *testing.T) {
 	defer shutdownNodes(nodes)
 
 	target := int64(50)
-	err := gossip(nodes[1:], target, false, 100000*time.Second)
+	err := gossip(nodes[1:], target, false, 3*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,7 +565,7 @@ func TestCatchUp(t *testing.T) {
 				t.Fatalf("Timeout waiting for node4 to enter CatchingUp state")
 			default:
 			}
-			if node4.getState() == CatchingUp {
+			if node4.state.getState() == CatchingUp {
 				break
 			}
 			<-time.After(time.Microsecond)
@@ -594,7 +597,7 @@ func TestFastSync(t *testing.T) {
 
 	var target int64 = 50
 
-	err := gossip(nodes, target, false, 30000*time.Second)
+	err := gossip(nodes, target, false, 3*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -622,7 +625,7 @@ func TestFastSync(t *testing.T) {
 				t.Fatalf("Timeout waiting for node4 to enter CatchingUp state")
 			default:
 			}
-			if node4.getState() == CatchingUp {
+			if node4.state.getState() == CatchingUp {
 				break
 			}
 		}
@@ -697,7 +700,7 @@ func TestBootstrapAllNodes(t *testing.T) {
 func gossip(
 	nodes []*Node, target int64, shutdown bool, timeout time.Duration) error {
 	runNodes(nodes, true)
-	err := bombardAndWait(nodes, target, timeout*100000)
+	err := bombardAndWait(nodes, target, timeout)
 	if err != nil {
 		return err
 	}
@@ -813,4 +816,12 @@ func BenchmarkGossip(b *testing.B) {
 		nodes := initNodes(keys, ps, 1000, 1000, "inmem", logger, b)
 		gossip(nodes, 50, true, 3*time.Second)
 	}
+}
+
+func TestMain(m *testing.M) {
+	runtime.SetBlockProfileRate(1)
+	go func() {
+		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	os.Exit(m.Run())
 }
