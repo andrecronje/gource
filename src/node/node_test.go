@@ -448,7 +448,7 @@ func TestMissingNodeGossip(t *testing.T) {
 	nodes := initNodes(keys, ps, 1000, 1000, "inmem", logger, t)
 	defer shutdownNodes(nodes)
 
-	err := gossip(nodes[1:], 10, true, 3*time.Second)
+	err := gossip(nodes[1:], 10, true, 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,13 +502,13 @@ func TestSyncLimit(t *testing.T) {
 func TestFastForward(t *testing.T) {
 	logger := common.NewTestLogger(t)
 
-	keys, ps := initPeers(4)
+	keys, ps := initPeers(5)
 	nodes := initNodes(keys, ps, 1000, 1000,
 		"inmem", logger, t)
 	defer shutdownNodes(nodes)
 
 	target := int64(50)
-	err := gossip(nodes[1:], target, false, 3*time.Second)
+	err := gossip(nodes[1:], target, false, 300*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,7 +548,7 @@ func TestCatchUp(t *testing.T) {
 
 	target := int64(50)
 
-	err := gossip(normalNodes, target, false, 4*time.Second)
+	err := gossip(normalNodes, target, false, 40*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +557,7 @@ func TestCatchUp(t *testing.T) {
 	node4 := initNodes(keys[3:], ps, 1000, 400, "inmem", logger, t)[0]
 
 	// Run parallel routine to check node4 eventually reaches CatchingUp state.
-	timeout := time.After(100000 * time.Second)
+	timeout := time.After(10 * time.Second)
 	go func() {
 		for {
 			select {
@@ -607,7 +607,7 @@ func TestFastSync(t *testing.T) {
 	node4.Shutdown()
 
 	secondTarget := target + 50
-	err = bombardAndWait(nodes[0:3], secondTarget, 60000*time.Second)
+	err = bombardAndWait(nodes[0:3], secondTarget, 6*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -638,7 +638,7 @@ func TestFastSync(t *testing.T) {
 
 	// Gossip some more
 	thirdTarget := secondTarget + 20
-	err = bombardAndWait(nodes, thirdTarget, 60000*time.Second)
+	err = bombardAndWait(nodes, thirdTarget, 6*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -739,12 +739,10 @@ func bombardAndWait(nodes []*Node, target int64, timeout time.Duration) error {
 					break
 				}
 			}
-			<-time.After(time.Microsecond)
 		}
 		if done {
 			break
 		}
-		<-time.After(time.Microsecond)
 	}
 	close(quit)
 	return nil

@@ -5,9 +5,7 @@ import (
 )
 
 type nodeState2 struct {
-	cond    *sync.Cond
-	tickets chan func()
-
+	cond *sync.Cond
 	lock sync.RWMutex
 	wip  int
 

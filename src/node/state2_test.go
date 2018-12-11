@@ -1,7 +1,6 @@
 package node
 
 import (
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -50,7 +49,6 @@ func TestConcurrentGoFuncs(t *testing.T) {
 
 	f := func() {
 		time.Sleep(time.Microsecond * 10)
-		fmt.Println(time.Now().String())
 	}
 
 	wg := sync.WaitGroup{}
